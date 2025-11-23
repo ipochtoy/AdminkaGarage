@@ -41,74 +41,166 @@ class PhotoBatchResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Основная информация')
+                // 1. Photos Section (Full Width)
+                Forms\Components\Section::make('Фото')
                     ->schema([
-                        Forms\Components\TextInput::make('correlation_id')
-                            ->label('ID карточки')
-                            ->disabled()
-                            ->maxLength(32),
-                        Forms\Components\TextInput::make('chat_id')
-                            ->label('Chat ID')
-                            ->disabled()
-                            ->numeric(),
-                        Forms\Components\Select::make('status')
-                            ->label('Статус')
-                            ->options([
-                                'pending' => 'Ожидает',
-                                'processed' => 'Обработано',
-                                'failed' => 'Ошибка',
-                            ])
-                            ->required(),
-                        Forms\Components\DateTimePicker::make('uploaded_at')
-                            ->label('Загружено')
-                            ->disabled(),
-                        Forms\Components\DateTimePicker::make('processed_at')
-                            ->label('Обработано')
-                            ->disabled(),
-                    ])->columns(2),
+                        Forms\Components\View::make('filament.forms.components.photo-gallery'),
+                    ])
+                    ->columnSpanFull()
+                    ->collapsible(),
 
-                Forms\Components\Section::make('Описание товара')
+                // 2. Barcodes Section (Full Width)
+                Forms\Components\Section::make('')
+                    ->schema([
+                        Forms\Components\View::make('filament.forms.components.barcode-list'),
+                    ])
+                    ->columnSpanFull(),
+
+                // 3. AI Assistant Section
+                Forms\Components\Section::make('AI Ассистент')
+                    ->schema([
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('generate_openai')
+                                ->label('OpenAI GPT-5.1')
+                                ->icon('heroicon-m-bolt')
+                                ->color('success')
+                                ->action(function ($set, $livewire) {
+                                    static::generateAIDescription($set, $livewire, 'openai');
+                                }),
+                            Forms\Components\Actions\Action::make('generate_gemini')
+                                ->label('Gemini 3 Pro')
+                                ->icon('heroicon-m-sparkles')
+                                ->color('info')
+                                ->action(function ($set, $livewire) {
+                                    static::generateAIDescription($set, $livewire, 'gemini');
+                                }),
+                        ])->fullWidth(),
+
+                        Forms\Components\Placeholder::make('ai_summary_display')
+                            ->label('Результат AI')
+                            ->content(fn($record) => $record && $record->ai_summary ? new HtmlString('
+                                <div x-data="{ expanded: false }">
+                                    <div x-show="!expanded" class="text-xs bg-gray-900 p-3 rounded border border-gray-700 text-gray-300">
+                                        <span class="text-green-400">✓ Описание сгенерировано</span>
+                                        <button type="button" @click="expanded = true" class="ml-2 text-blue-400 hover:underline">Показать JSON</button>
+                                    </div>
+                                    <div x-show="expanded" x-cloak>
+                                        <pre class="whitespace-pre-wrap text-xs bg-gray-900 p-3 rounded border border-gray-700 text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">' . e($record->ai_summary) . '</pre>
+                                        <button type="button" @click="expanded = false" class="mt-1 text-xs text-blue-400 hover:underline">Свернуть</button>
+                                    </div>
+                                </div>
+                            ') : null)
+                            ->hidden(fn($record) => !$record || empty($record->ai_summary)),
+
+                        Forms\Components\View::make('filament.forms.components.voice-correction'),
+
+                        Forms\Components\Hidden::make('ai_summary'),
+                    ])
+                    ->columnSpanFull(),
+
+                // 4. Price Suggestions
+                Forms\Components\Section::make('Рекомендации по цене')
+                    ->schema([
+                        Forms\Components\View::make('filament.forms.components.price-suggestions'),
+                    ])
+                    ->columnSpanFull()
+                    ->collapsible(),
+
+                // 5. Product Description Form
+                Forms\Components\Section::make('Редактирование')
                     ->schema([
                         Forms\Components\TextInput::make('title')
                             ->label('Название товара')
-                            ->maxLength(500),
+                            ->required()
+                            ->maxLength(500)
+                            ->columnSpanFull(),
+                        
                         Forms\Components\Textarea::make('description')
                             ->label('Описание')
+                            ->rows(5)
                             ->columnSpanFull(),
-                        Forms\Components\TextInput::make('price')
-                            ->label('Цена')
-                            ->numeric()
-                            ->prefix('$'),
-                        Forms\Components\Select::make('condition')
-                            ->label('Состояние')
-                            ->options([
-                                'new' => 'Новое',
-                                'used' => 'Б/у',
-                                'refurbished' => 'Восстановленное',
-                            ]),
-                        Forms\Components\TextInput::make('category')
-                            ->label('Категория')
-                            ->maxLength(200),
-                        Forms\Components\TextInput::make('brand')
-                            ->label('Бренд')
-                            ->maxLength(200),
-                        Forms\Components\TextInput::make('size')
-                            ->label('Размер')
-                            ->maxLength(100),
-                        Forms\Components\TextInput::make('color')
-                            ->label('Цвет')
-                            ->maxLength(100),
-                        Forms\Components\TextInput::make('sku')
-                            ->label('SKU/Артикул')
-                            ->maxLength(200),
-                        Forms\Components\TextInput::make('quantity')
-                            ->label('Количество')
-                            ->numeric()
-                            ->default(1),
-                        Forms\Components\Textarea::make('ai_summary')
-                            ->label('AI Сводка')
-                            ->columnSpanFull(),
-                    ])->columns(2),
+
+                        Forms\Components\Grid::make([
+                            'default' => 1,
+                            'sm' => 2,
+                            'md' => 4,
+                        ])
+                        ->schema([
+                            Forms\Components\TextInput::make('price')
+                                ->label('Цена')
+                                ->numeric()
+                                ->prefix('$'),
+                            Forms\Components\Select::make('condition')
+                                ->label('Состояние')
+                                ->options([
+                                    'new' => 'Новое',
+                                    'used' => 'Б/у',
+                                    'refurbished' => 'Восстановленное',
+                                ]),
+                            Forms\Components\TextInput::make('brand')
+                                ->label('Бренд')
+                                ->maxLength(200),
+                            Forms\Components\TextInput::make('category')
+                                ->label('Категория')
+                                ->maxLength(200),
+                            Forms\Components\TextInput::make('size')
+                                ->label('Размер')
+                                ->maxLength(100),
+                            Forms\Components\TextInput::make('color')
+                                ->label('Цвет')
+                                ->maxLength(100),
+                            Forms\Components\TextInput::make('sku')
+                                ->label('SKU')
+                                ->maxLength(200),
+                            Forms\Components\TextInput::make('quantity')
+                                ->label('Кол-во')
+                                ->numeric()
+                                ->default(1),
+                        ]),
+                    ]),
+
+                // 6. Preview Button
+                Forms\Components\Section::make('')
+                    ->schema([
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('preview')
+                                ->label('Предварительный просмотр карточки товара')
+                                ->icon('heroicon-o-eye')
+                                ->color('warning')
+                                ->modalHeading('Предварительный просмотр')
+                                ->modalWidth('4xl')
+                                ->modalContent(function ($record, $livewire) {
+                                    // Get current form data
+                                    $formData = $livewire->data ?? [];
+                                    return view('filament.forms.components.product-preview', [
+                                        'record' => $record,
+                                        'formData' => $formData,
+                                    ]);
+                                })
+                                ->modalSubmitAction(false)
+                                ->modalCancelActionLabel('Закрыть'),
+                        ])->fullWidth(),
+                    ])
+                    ->columnSpanFull(),
+
+                // 5. Tech Info (Collapsed)
+                Forms\Components\Section::make('Техническая информация')
+                    ->schema([
+                         Forms\Components\Grid::make(3)->schema([
+                            Forms\Components\TextInput::make('correlation_id')->label('ID')->disabled(),
+                            Forms\Components\Select::make('status')
+                                ->label('Статус')
+                                ->options(['pending'=>'Ожидает', 'processed'=>'Обработано', 'failed'=>'Ошибка'])
+                                ->required(),
+                            Forms\Components\TextInput::make('chat_id')->label('Chat ID')->disabled(),
+                         ]),
+                         Forms\Components\Grid::make(2)->schema([
+                             Forms\Components\DateTimePicker::make('uploaded_at')->label('Загружено')->disabled(),
+                             Forms\Components\DateTimePicker::make('processed_at')->label('Обработано')->disabled(),
+                         ]),
+                    ])
+                    ->collapsed()
+                    ->columnSpanFull(),
             ]);
     }
 
@@ -121,13 +213,13 @@ class PhotoBatchResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->weight('bold')
-                    ->url(fn (PhotoBatch $record): string => route('filament.admin.resources.photo-batches.edit', $record)),
+                    ->url(fn(PhotoBatch $record): string => route('filament.admin.resources.photo-batches.edit', $record)),
 
                 Tables\Columns\TextColumn::make('title')
                     ->label('Название товара')
                     ->searchable()
                     ->limit(50)
-                    ->tooltip(fn (PhotoBatch $record): string => $record->title ?? ''),
+                    ->tooltip(fn(PhotoBatch $record): string => $record->title ?? ''),
 
                 Tables\Columns\TextColumn::make('gg_labels')
                     ->label('Наша лейба')
@@ -139,20 +231,16 @@ class PhotoBatchResource extends Resource
                     ->badge()
                     ->color('warning'),
 
-                Tables\Columns\TextColumn::make('chat_id')
-                    ->label('Chat ID')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 Tables\Columns\TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn(string $state): string => match ($state) {
                         'pending' => 'gray',
                         'processed' => 'success',
                         'failed' => 'danger',
+                        'default' => 'gray'
                     })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                    ->formatStateUsing(fn(string $state): string => match ($state) {
                         'pending' => 'Ожидает',
                         'processed' => 'Обработано',
                         'failed' => 'Ошибка',
@@ -184,12 +272,6 @@ class PhotoBatchResource extends Resource
                     ->label('Фото')
                     ->counts('photos')
                     ->sortable(),
-
-                Tables\Columns\TextColumn::make('price')
-                    ->label('Цена')
-                    ->money('USD')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('uploaded_at', 'desc')
             ->filters([
@@ -200,41 +282,18 @@ class PhotoBatchResource extends Resource
                         'processed' => 'Обработано',
                         'failed' => 'Ошибка',
                     ]),
-                Tables\Filters\Filter::make('uploaded_at')
-                    ->form([
-                        Forms\Components\DatePicker::make('from')
-                            ->label('От'),
-                        Forms\Components\DatePicker::make('until')
-                            ->label('До'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when($data['from'], fn (Builder $query, $date): Builder => $query->whereDate('uploaded_at', '>=', $date))
-                            ->when($data['until'], fn (Builder $query, $date): Builder => $query->whereDate('uploaded_at', '<=', $date));
-                    }),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\Action::make('view_card')
-                    ->label('Карточка')
+                    ->label('Просмотр')
                     ->icon('heroicon-o-eye')
-                    ->url(fn (PhotoBatch $record): string => route('product-card', $record->id))
+                    ->url(fn(PhotoBatch $record): string => route('product-card', $record->id))
                     ->openUrlInNewTab(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\BulkAction::make('send_to_ebay')
-                        ->label('Отправить в eBay')
-                        ->icon('heroicon-o-arrow-up-tray')
-                        ->action(function (Collection $records): void {
-                            // TODO: Implement eBay integration
-                            foreach ($records as $record) {
-                                // Create eBay candidate
-                            }
-                        })
-                        ->requiresConfirmation()
-                        ->deselectRecordsAfterCompletion(),
                 ]),
             ]);
     }
@@ -242,7 +301,7 @@ class PhotoBatchResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\PhotosRelationManager::class,
+            //
         ];
     }
 
@@ -258,5 +317,158 @@ class PhotoBatchResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->withCount('photos');
+    }
+
+    protected static function generateAIDescription($set, $livewire, string $provider): void
+    {
+        $record = $livewire->getRecord();
+        if (!$record) return;
+
+        $photos = $record->photos;
+        if ($photos->isEmpty()) {
+            \Filament\Notifications\Notification::make()->title('Нет фото')->warning()->send();
+            return;
+        }
+
+        \Filament\Notifications\Notification::make()->title('Генерация описания...')->info()->send();
+
+        // Increase timeout for AI operations
+        set_time_limit(120);
+
+        if ($provider === 'gemini') {
+            $service = new \App\Services\GeminiService();
+            $photoPaths = $photos->pluck('image')->toArray();
+            $result = $service->generateProductDescription($photoPaths);
+        } else {
+            // OpenAI - use file paths directly
+            $aiService = app(\App\Services\AIService::class)->setProvider('openai');
+            $photoPaths = $photos->pluck('image')->toArray();
+            $barcodes = collect($record->getAllBarcodes())->pluck('data')->toArray();
+            $ggLabels = $record->getGgLabels();
+
+            $response = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
+
+            if ($response) {
+                // Try to parse JSON
+                $result = json_decode($response, true);
+                if ($result) {
+                    $set('title', $result['title'] ?? '');
+                    $set('description', $result['description'] ?? '');
+                    $set('brand', $result['brand'] ?? '');
+                    $set('category', $result['category'] ?? '');
+                    $set('color', $result['color'] ?? '');
+                    $set('size', $result['size'] ?? '');
+                    $set('condition', $result['condition'] ?? 'used');
+                    $set('price', $result['price_estimate'] ?? null);
+                    $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+                    // Save detected codes
+                    $firstPhoto = $photos->first();
+                    if ($firstPhoto) {
+                        if (!empty($result['internal_ids'])) {
+                            foreach ($result['internal_ids'] as $code) {
+                                if (!$firstPhoto->barcodes()->where('data', $code)->exists()) {
+                                    $firstPhoto->barcodes()->create([
+                                        'data' => $code,
+                                        'symbology' => 'MANUAL-AI',
+                                        'source' => 'gg-label'
+                                    ]);
+                                }
+                            }
+                        }
+                        if (!empty($result['barcodes'])) {
+                            foreach ($result['barcodes'] as $bc) {
+                                if (!$firstPhoto->barcodes()->where('data', $bc)->exists()) {
+                                    $firstPhoto->barcodes()->create([
+                                        'data' => $bc,
+                                        'symbology' => 'MANUAL-AI',
+                                        'source' => 'manual'
+                                    ]);
+                                }
+                            }
+                        }
+                    }
+
+                    // Save to database for price panel
+                    $record->update([
+                        'title' => $result['title'] ?? $record->title,
+                        'description' => $result['description'] ?? null,
+                        'brand' => $result['brand'] ?? null,
+                        'category' => $result['category'] ?? null,
+                        'color' => $result['color'] ?? null,
+                        'size' => $result['size'] ?? null,
+                        'condition' => $result['condition'] ?? 'used',
+                        'price' => $result['price_estimate'] ?? null,
+                        'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                    ]);
+                } else {
+                    $set('description', $response);
+                    $set('ai_summary', $response);
+                    $record->update(['description' => $response, 'ai_summary' => $response]);
+                }
+                \Filament\Notifications\Notification::make()->title('Описание создано (OpenAI)')->success()->send();
+                $livewire->dispatch('$refresh');
+            } else {
+                \Filament\Notifications\Notification::make()->title('Ошибка OpenAI')->danger()->send();
+            }
+            return;
+        }
+
+        if ($result) {
+            $set('title', $result['title'] ?? '');
+            $set('description', $result['description'] ?? '');
+            $set('brand', $result['brand'] ?? '');
+            $set('category', $result['category'] ?? '');
+            $set('color', $result['color'] ?? '');
+            $set('size', $result['size'] ?? '');
+            $set('condition', $result['condition'] ?? 'used');
+            $set('price', $result['price_estimate'] ?? null);
+            $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+            // Save detected codes
+            $firstPhoto = $photos->first();
+            if ($firstPhoto) {
+                if (!empty($result['internal_ids'])) {
+                    foreach ($result['internal_ids'] as $code) {
+                        if (!$firstPhoto->barcodes()->where('data', $code)->exists()) {
+                            $firstPhoto->barcodes()->create([
+                                'data' => $code,
+                                'symbology' => 'MANUAL-AI',
+                                'source' => 'gg-label'
+                            ]);
+                        }
+                    }
+                }
+                if (!empty($result['barcodes'])) {
+                    foreach ($result['barcodes'] as $bc) {
+                        if (!$firstPhoto->barcodes()->where('data', $bc)->exists()) {
+                            $firstPhoto->barcodes()->create([
+                                'data' => $bc,
+                                'symbology' => 'MANUAL-AI',
+                                'source' => 'manual'
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // Save to database for price panel
+            $record->update([
+                'title' => $result['title'] ?? $record->title,
+                'description' => $result['description'] ?? null,
+                'brand' => $result['brand'] ?? null,
+                'category' => $result['category'] ?? null,
+                'color' => $result['color'] ?? null,
+                'size' => $result['size'] ?? null,
+                'condition' => $result['condition'] ?? 'used',
+                'price' => $result['price_estimate'] ?? null,
+                'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            ]);
+
+            \Filament\Notifications\Notification::make()->title('Описание создано (Gemini)')->success()->send();
+            $livewire->dispatch('$refresh');
+        } else {
+            \Filament\Notifications\Notification::make()->title('Ошибка Gemini')->danger()->send();
+        }
     }
 }

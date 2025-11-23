@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PhotoBufferResource\Pages;
 
 use App\Filament\Resources\PhotoBufferResource;
+use App\Jobs\ProcessPhotoBatchJob;
 use App\Models\PhotoBuffer;
 use App\Models\PhotoBatch;
 use App\Models\Photo;
@@ -117,9 +118,13 @@ class ListPhotoBuffers extends Page
 
         $this->lastBatchId = $batch->id;
 
+        // Dispatch auto-processing job
+        $provider = config('services.ai.default_provider', 'gemini');
+        ProcessPhotoBatchJob::dispatch($batch, $provider);
+
         Notification::make()
             ->title('Создана карточка ' . $batch->correlation_id)
-            ->body(count($this->selected) . ' фото')
+            ->body(count($this->selected) . ' фото. Обработка запущена...')
             ->success()
             ->send();
 

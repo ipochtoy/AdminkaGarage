@@ -69,17 +69,29 @@ class TelegramBotCommand extends Command
 
         // Handle /start command
         if (isset($message['text']) && $message['text'] === '/start') {
-            $this->sendMessage($chatId, "Привет! Отправляй фото для загрузки в буфер.");
+            $this->sendMessage($chatId, "Привет! Отправляй фото для загрузки в буфер.\n\n💡 Совет: отправляй фото как файлы (📎) чтобы сохранить дату съёмки.");
             return;
         }
 
-        // Handle photos
+        // Handle photos (compressed, no EXIF)
         if (isset($message['photo'])) {
             $photos = $message['photo'];
             $largestPhoto = end($photos);
             $fileId = $largestPhoto['file_id'];
 
             $this->downloadAndSavePhoto($fileId, $chatId, $messageId);
+        }
+
+        // Handle documents (files with EXIF preserved)
+        if (isset($message['document'])) {
+            $doc = $message['document'];
+            $mimeType = $doc['mime_type'] ?? '';
+
+            // Only process image files
+            if (str_starts_with($mimeType, 'image/')) {
+                $fileId = $doc['file_id'];
+                $this->downloadAndSavePhoto($fileId, $chatId, $messageId);
+            }
         }
     }
 
@@ -108,8 +120,9 @@ class TelegramBotCommand extends Command
         // Download file
         $fileContent = Http::get($fileUrl)->body();
 
-        // Save to storage
-        $storagePath = 'buffer/' . date('Y/m/d') . '/' . uniqid() . '.jpg';
+        // Get file extension from original path
+        $ext = pathinfo($filePath, PATHINFO_EXTENSION) ?: 'jpg';
+        $storagePath = 'buffer/' . date('Y/m/d') . '/' . uniqid() . '.' . $ext;
         Storage::disk('public')->put($storagePath, $fileContent);
 
         // Save to database (skip if already exists)

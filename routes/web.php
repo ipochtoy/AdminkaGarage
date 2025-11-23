@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProductCardController;
+use App\Http\Controllers\Api\VoiceCorrectionController;
 use App\Models\PhotoBuffer;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
@@ -26,7 +27,27 @@ Route::post('/api/upload-photo', function (Request $request) {
     return response()->json(['success' => true, 'path' => $path]);
 });
 
+// Product Card
 Route::get('/product-card/{photoBatch}', [ProductCardController::class, 'show'])->name('product-card');
-Route::post('/product-card/{photoBatch}', [ProductCardController::class, 'update'])->name('product-card.update');
-Route::post('/product-card/{photoBatch}/photo/{photoId}/main', [ProductCardController::class, 'setMainPhoto'])->name('product-card.set-main');
-Route::delete('/product-card/{photoBatch}/photo/{photoId}', [ProductCardController::class, 'deletePhoto'])->name('product-card.delete-photo');
+
+// Product Card API
+Route::prefix('api/card/{photoBatch}')->group(function () {
+    Route::post('/save', [ProductCardController::class, 'save']);
+    Route::post('/generate-summary', [ProductCardController::class, 'generateSummary']);
+    Route::post('/scan-barcodes', [ProductCardController::class, 'scanBarcodes']);
+    Route::post('/search-ebay', [ProductCardController::class, 'searchEbay']);
+    Route::post('/send-pochtoy', [ProductCardController::class, 'sendToPochtoy']);
+    Route::post('/reorder-photos', [ProductCardController::class, 'reorderPhotos']);
+    Route::post('/add-barcode', [ProductCardController::class, 'addBarcode']);
+    Route::delete('/delete', [ProductCardController::class, 'deleteCard']);
+});
+
+// Photo API
+Route::prefix('api/photo/{photo}')->group(function () {
+    Route::post('/rotate', [ProductCardController::class, 'rotatePhoto']);
+    Route::post('/set-main', [ProductCardController::class, 'setMainPhoto']);
+    Route::delete('/delete', [ProductCardController::class, 'deletePhoto']);
+});
+
+// Voice Correction API
+Route::post('/api/voice-correction', [VoiceCorrectionController::class, 'apply']);

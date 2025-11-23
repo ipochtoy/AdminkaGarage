@@ -1,4 +1,5 @@
 <x-filament-panels::page>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <div class="space-y-6">
         <!-- Filter Section -->
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm ring-1 ring-gray-950/5 p-6">
