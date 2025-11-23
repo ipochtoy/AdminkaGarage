@@ -16,7 +16,7 @@ class GeminiService
         $this->apiKey = config('services.gemini.api_key') ?? env('GEMINI_API_KEY', '');
     }
 
-    public function generateProductDescription(array $photoPaths, ?string $customPrompt = null): ?array
+    public function generateProductDescription(array $photoPaths, ?string $customPrompt = null, ?string $model = null): ?array
     {
         if (empty($this->apiKey)) {
             Log::error('GEMINI_API_KEY not set in config or env');
@@ -62,7 +62,8 @@ class GeminiService
                 ],
             ];
 
-            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}";
+            $modelToUse = $model ?? $this->model;
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$modelToUse}:generateContent?key={$this->apiKey}";
 
             Log::info("GeminiService: Sending request to $url");
 

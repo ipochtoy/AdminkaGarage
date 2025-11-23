@@ -19,7 +19,8 @@ class ProcessPhotoBatchJob implements ShouldQueue
     public function __construct(
         public PhotoBatch $batch,
         public string $provider = 'gemini'
-    ) {}
+    ) {
+    }
 
     public function handle(): void
     {
@@ -117,30 +118,22 @@ class ProcessPhotoBatchJob implements ShouldQueue
         } else {
             // OpenAI
             $aiService = app(AIService::class)->setProvider('openai');
-            $response = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
+            $result = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
 
-            if ($response) {
-                $result = json_decode($response, true);
-                if ($result) {
-                    $this->batch->update([
-                        'title' => $result['title'] ?? null,
-                        'description' => $result['description'] ?? null,
-                        'brand' => $result['brand'] ?? null,
-                        'category' => $result['category'] ?? null,
-                        'color' => $result['color'] ?? null,
-                        'size' => $result['size'] ?? null,
-                        'condition' => $result['condition'] ?? 'used',
-                        'price' => $result['price_estimate'] ?? null,
-                        'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-                    ]);
+            if ($result) {
+                $this->batch->update([
+                    'title' => $result['title'] ?? null,
+                    'description' => $result['description'] ?? null,
+                    'brand' => $result['brand'] ?? null,
+                    'category' => $result['category'] ?? null,
+                    'color' => $result['color'] ?? null,
+                    'size' => $result['size'] ?? null,
+                    'condition' => $result['condition'] ?? 'used',
+                    'price' => $result['price_estimate'] ?? null,
+                    'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                ]);
 
-                    $this->saveDetectedCodes($result, $photos->first());
-                } else {
-                    $this->batch->update([
-                        'description' => $response,
-                        'ai_summary' => $response,
-                    ]);
-                }
+                $this->saveDetectedCodes($result, $photos->first());
             }
         }
 

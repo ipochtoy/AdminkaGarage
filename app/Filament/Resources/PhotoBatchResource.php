@@ -67,12 +67,19 @@ class PhotoBatchResource extends Resource
                                 ->action(function ($set, $livewire) {
                                     static::generateAIDescription($set, $livewire, 'openai');
                                 }),
-                            Forms\Components\Actions\Action::make('generate_gemini')
+                            Forms\Components\Actions\Action::make('generate_gemini_pro')
                                 ->label('Gemini 3 Pro')
                                 ->icon('heroicon-m-sparkles')
                                 ->color('info')
                                 ->action(function ($set, $livewire) {
-                                    static::generateAIDescription($set, $livewire, 'gemini');
+                                    static::generateAIDescription($set, $livewire, 'gemini', 'gemini-3-pro-preview');
+                                }),
+                            Forms\Components\Actions\Action::make('generate_gemini_flash')
+                                ->label('Gemini 2.5 Flash')
+                                ->icon('heroicon-m-bolt')
+                                ->color('warning')
+                                ->action(function ($set, $livewire) {
+                                    static::generateAIDescription($set, $livewire, 'gemini', 'gemini-2.5-flash-preview-09-2025');
                                 }),
                         ])->fullWidth(),
 
@@ -408,7 +415,7 @@ class PhotoBatchResource extends Resource
         return parent::getEloquentQuery()->withCount('photos');
     }
 
-    protected static function generateAIDescription($set, $livewire, string $provider): void
+    protected static function generateAIDescription($set, $livewire, string $provider, ?string $model = null): void
     {
         $record = $livewire->getRecord();
         if (!$record)
@@ -428,7 +435,7 @@ class PhotoBatchResource extends Resource
         if ($provider === 'gemini') {
             $service = new \App\Services\GeminiService();
             $photoPaths = $photos->pluck('image')->toArray();
-            $result = $service->generateProductDescription($photoPaths);
+            $result = $service->generateProductDescription($photoPaths, null, $model);
         } else {
             // OpenAI - use file paths directly
             $aiService = app(\App\Services\AIService::class)->setProvider('openai');
@@ -436,66 +443,59 @@ class PhotoBatchResource extends Resource
             $barcodes = collect($record->getAllBarcodes())->pluck('data')->toArray();
             $ggLabels = $record->getGgLabels();
 
-            $response = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
+            $result = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
 
-            if ($response) {
-                // Try to parse JSON
-                $result = json_decode($response, true);
-                if ($result) {
-                    $set('title', $result['title'] ?? '');
-                    $set('description', $result['description'] ?? '');
-                    $set('brand', $result['brand'] ?? '');
-                    $set('category', $result['category'] ?? '');
-                    $set('color', $result['color'] ?? '');
-                    $set('size', $result['size'] ?? '');
-                    $set('condition', $result['condition'] ?? 'used');
-                    $set('price', $result['price_estimate'] ?? null);
-                    $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            if ($result) {
+                $set('title', $result['title'] ?? '');
+                $set('description', $result['description'] ?? '');
+                $set('brand', $result['brand'] ?? '');
+                $set('category', $result['category'] ?? '');
+                $set('color', $result['color'] ?? '');
+                $set('size', $result['size'] ?? '');
+                $set('condition', $result['condition'] ?? 'used');
+                $set('price', $result['price_estimate'] ?? null);
+                $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-                    // Save detected codes
-                    $firstPhoto = $photos->first();
-                    if ($firstPhoto) {
-                        if (!empty($result['internal_ids'])) {
-                            foreach ($result['internal_ids'] as $code) {
-                                if (!$firstPhoto->barcodes()->where('data', $code)->exists()) {
-                                    $firstPhoto->barcodes()->create([
-                                        'data' => $code,
-                                        'symbology' => 'MANUAL-AI',
-                                        'source' => 'gg-label'
-                                    ]);
-                                }
-                            }
-                        }
-                        if (!empty($result['barcodes'])) {
-                            foreach ($result['barcodes'] as $bc) {
-                                if (!$firstPhoto->barcodes()->where('data', $bc)->exists()) {
-                                    $firstPhoto->barcodes()->create([
-                                        'data' => $bc,
-                                        'symbology' => 'MANUAL-AI',
-                                        'source' => 'manual'
-                                    ]);
-                                }
+                // Save detected codes
+                $firstPhoto = $photos->first();
+                if ($firstPhoto) {
+                    if (!empty($result['internal_ids'])) {
+                        foreach ($result['internal_ids'] as $code) {
+                            if (!$firstPhoto->barcodes()->where('data', $code)->exists()) {
+                                $firstPhoto->barcodes()->create([
+                                    'data' => $code,
+                                    'symbology' => 'MANUAL-AI',
+                                    'source' => 'gg-label'
+                                ]);
                             }
                         }
                     }
-
-                    // Save to database for price panel
-                    $record->update([
-                        'title' => $result['title'] ?? $record->title,
-                        'description' => $result['description'] ?? null,
-                        'brand' => $result['brand'] ?? null,
-                        'category' => $result['category'] ?? null,
-                        'color' => $result['color'] ?? null,
-                        'size' => $result['size'] ?? null,
-                        'condition' => $result['condition'] ?? 'used',
-                        'price' => $result['price_estimate'] ?? null,
-                        'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
-                    ]);
-                } else {
-                    $set('description', $response);
-                    $set('ai_summary', $response);
-                    $record->update(['description' => $response, 'ai_summary' => $response]);
+                    if (!empty($result['barcodes'])) {
+                        foreach ($result['barcodes'] as $bc) {
+                            if (!$firstPhoto->barcodes()->where('data', $bc)->exists()) {
+                                $firstPhoto->barcodes()->create([
+                                    'data' => $bc,
+                                    'symbology' => 'MANUAL-AI',
+                                    'source' => 'manual'
+                                ]);
+                            }
+                        }
+                    }
                 }
+
+                // Save to database for price panel
+                $record->update([
+                    'title' => $result['title'] ?? $record->title,
+                    'description' => $result['description'] ?? null,
+                    'brand' => $result['brand'] ?? null,
+                    'category' => $result['category'] ?? null,
+                    'color' => $result['color'] ?? null,
+                    'size' => $result['size'] ?? null,
+                    'condition' => $result['condition'] ?? 'used',
+                    'price' => $result['price_estimate'] ?? null,
+                    'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+                ]);
+
                 \Filament\Notifications\Notification::make()->title('Описание создано (OpenAI)')->success()->send();
                 $livewire->dispatch('$refresh');
             } else {

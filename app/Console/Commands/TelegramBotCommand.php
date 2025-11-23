@@ -48,11 +48,20 @@ class TelegramBotCommand extends Command
                             $this->processUpdate($update);
                         }
                     }
+                } else {
+                    $this->warn('HTTP error: ' . $response->status());
+                    sleep(5);
                 }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $this->error('Connection error: ' . $e->getMessage());
+                sleep(10);
             } catch (\Exception $e) {
                 $this->error('Error: ' . $e->getMessage());
                 sleep(5);
             }
+            
+            // Задержка между запросами чтобы не перегружать API
+            usleep(500000); // 0.5 секунды
         }
     }
 
@@ -107,18 +116,35 @@ class TelegramBotCommand extends Command
         }
 
         // Get file path
-        $response = Http::get("{$this->apiUrl}/getFile", ['file_id' => $fileId]);
+        try {
+            $response = Http::timeout(30)->get("{$this->apiUrl}/getFile", ['file_id' => $fileId]);
 
-        if (!$response->successful()) {
-            $this->sendMessage($chatId, "Ошибка получения файла");
+            if (!$response->successful()) {
+                $this->sendMessage($chatId, "Ошибка получения файла");
+                return;
+            }
+
+            $fileData = $response->json();
+            if (!isset($fileData['result']['file_path'])) {
+                $this->sendMessage($chatId, "Ошибка: файл не найден");
+                return;
+            }
+
+            $filePath = $fileData['result']['file_path'];
+            $fileUrl = "https://api.telegram.org/file/bot{$this->token}/{$filePath}";
+
+            // Download file
+            $fileResponse = Http::timeout(60)->get($fileUrl);
+            if (!$fileResponse->successful()) {
+                $this->sendMessage($chatId, "Ошибка загрузки файла");
+                return;
+            }
+            $fileContent = $fileResponse->body();
+        } catch (\Exception $e) {
+            $this->error("Download error: " . $e->getMessage());
+            $this->sendMessage($chatId, "Ошибка при обработке файла");
             return;
         }
-
-        $filePath = $response->json()['result']['file_path'];
-        $fileUrl = "https://api.telegram.org/file/bot{$this->token}/{$filePath}";
-
-        // Download file
-        $fileContent = Http::get($fileUrl)->body();
 
         // Get file extension from original path
         $ext = pathinfo($filePath, PATHINFO_EXTENSION) ?: 'jpg';
@@ -174,28 +200,44 @@ class TelegramBotCommand extends Command
 
     private function sendMessageAndGetId(int $chatId, string $text): ?int
     {
-        $response = Http::post("{$this->apiUrl}/sendMessage", [
-            'chat_id' => $chatId,
-            'text' => $text,
-        ]);
+        try {
+            $response = Http::timeout(10)->post("{$this->apiUrl}/sendMessage", [
+                'chat_id' => $chatId,
+                'text' => $text,
+            ]);
 
-        return $response->json()['result']['message_id'] ?? null;
+            if ($response->successful()) {
+                $data = $response->json();
+                return $data['result']['message_id'] ?? null;
+            }
+        } catch (\Exception $e) {
+            $this->error("Send message error: " . $e->getMessage());
+        }
+        return null;
     }
 
     private function editMessage(int $chatId, int $messageId, string $text): void
     {
-        Http::post("{$this->apiUrl}/editMessageText", [
-            'chat_id' => $chatId,
-            'message_id' => $messageId,
-            'text' => $text,
-        ]);
+        try {
+            Http::timeout(10)->post("{$this->apiUrl}/editMessageText", [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'text' => $text,
+            ]);
+        } catch (\Exception $e) {
+            $this->error("Edit message error: " . $e->getMessage());
+        }
     }
 
     private function sendMessage(int $chatId, string $text): void
     {
-        Http::post("{$this->apiUrl}/sendMessage", [
-            'chat_id' => $chatId,
-            'text' => $text,
-        ]);
+        try {
+            Http::timeout(10)->post("{$this->apiUrl}/sendMessage", [
+                'chat_id' => $chatId,
+                'text' => $text,
+            ]);
+        } catch (\Exception $e) {
+            $this->error("Send message error: " . $e->getMessage());
+        }
     }
 }

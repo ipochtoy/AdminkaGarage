@@ -87,26 +87,100 @@ class EditPhotoBatch extends EditRecord
                         \Filament\Notifications\Notification::make()->title('Generation failed')->danger()->send();
                     }
                 }),
+
             Actions\DeleteAction::make(),
         ];
+    }
+
+    protected function getFormActions(): array
+    {
+        return array_merge(parent::getFormActions(), [
+            Actions\Action::make('to_battle')
+                ->label('В бой')
+                ->icon('heroicon-o-rocket-launch')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Отправить в Гараж?')
+                ->modalDescription('Будет создана карточка товара с выбранными фото (отмеченными "На продажу").')
+                ->action(function (PhotoBatchResource\Pages\EditPhotoBatch $livewire) {
+                    $record = $livewire->getRecord();
+
+                    // 1. Create Product
+                    $product = \App\Models\Product::create([
+                        'photo_batch_id' => $record->id,
+                        'title' => $record->title,
+                        'description' => $record->description,
+                        'price' => $record->price,
+                        'brand' => $record->brand,
+                        'category' => $record->category,
+                        'size' => $record->size,
+                        'color' => $record->color,
+                        'material' => $record->material,
+                        'condition' => $record->condition ?? 'used',
+                        'status' => 'published',
+                    ]);
+
+                    // 2. Copy Public Photos
+                    $publicPhotos = $record->photos()->where('is_public', true)->orderBy('order')->get();
+
+                    if ($publicPhotos->count() === 0) {
+                        // If no photos selected, take the main photo or the first one
+                        $mainPhoto = $record->photos()->where('is_main', true)->first() ?? $record->photos()->first();
+                        if ($mainPhoto) {
+                            $publicPhotos = collect([$mainPhoto]);
+                        }
+                    }
+
+                    foreach ($publicPhotos as $index => $photo) {
+                        $product->photos()->create([
+                            'image_path' => $photo->image,
+                            'order' => $index,
+                        ]);
+                    }
+
+                    \Filament\Notifications\Notification::make()
+                        ->title('Товар создан в Гараже!')
+                        ->success()
+                        ->actions([
+                            \Filament\Notifications\Actions\Action::make('view')
+                                ->label('Открыть')
+                                ->url(\App\Filament\Resources\ProductResource::getUrl('edit', ['record' => $product])),
+                        ])
+                        ->send();
+                }),
+        ]);
     }
 
     public function setMainPhoto(int $photoId): void
     {
         $photo = \App\Models\Photo::find($photoId);
-        if (!$photo) return;
-        
+        if (!$photo)
+            return;
+
         \App\Models\Photo::where('photo_batch_id', $photo->photo_batch_id)->update(['is_main' => false]);
         $photo->update(['is_main' => true]);
-        
+
         \Filament\Notifications\Notification::make()->title('Главное фото обновлено')->success()->send();
+        $this->dispatch('$refresh');
+    }
+
+    public function togglePublic(int $photoId): void
+    {
+        $photo = \App\Models\Photo::find($photoId);
+        if (!$photo)
+            return;
+
+        $photo->update(['is_public' => !$photo->is_public]);
+
+        // \Filament\Notifications\Notification::make()->title($photo->is_public ? 'Marked for sale' : 'Unmarked')->success()->send();
         $this->dispatch('$refresh');
     }
 
     public function rotatePhoto(int $photoId, string $direction): void
     {
         $photo = \App\Models\Photo::find($photoId);
-        if (!$photo) return;
+        if (!$photo)
+            return;
 
         $path = \Illuminate\Support\Facades\Storage::disk('public')->path($photo->image);
         if (!file_exists($path)) {
@@ -331,10 +405,12 @@ class EditPhotoBatch extends EditRecord
     public function autoAdjust(int $photoId): void
     {
         $photo = \App\Models\Photo::find($photoId);
-        if (!$photo) return;
+        if (!$photo)
+            return;
 
         $path = \Illuminate\Support\Facades\Storage::disk('public')->path($photo->image);
-        if (!file_exists($path)) return;
+        if (!file_exists($path))
+            return;
 
         try {
             $manager = new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver());
@@ -352,10 +428,12 @@ class EditPhotoBatch extends EditRecord
     public function whiteBalance(int $photoId): void
     {
         $photo = \App\Models\Photo::find($photoId);
-        if (!$photo) return;
+        if (!$photo)
+            return;
 
         $path = \Illuminate\Support\Facades\Storage::disk('public')->path($photo->image);
-        if (!file_exists($path)) return;
+        if (!file_exists($path))
+            return;
 
         try {
             $manager = new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver());

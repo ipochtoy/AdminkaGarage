@@ -15,11 +15,13 @@ class Photo extends Model
         'image',
         'uploaded_at',
         'is_main',
+        'is_public',
         'order',
     ];
 
     protected $casts = [
         'is_main' => 'boolean',
+        'is_public' => 'boolean',
         'uploaded_at' => 'datetime',
     ];
 

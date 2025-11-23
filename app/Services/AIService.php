@@ -32,7 +32,7 @@ class AIService
         return $this->callOpenAI($systemPrompt, $photoUrls, $prompt);
     }
 
-    public function generateSummaryFromPaths(array $photoPaths, array $barcodes = [], array $ggLabels = []): ?string
+    public function generateSummaryFromPaths(array $photoPaths, array $barcodes = [], array $ggLabels = []): ?array
     {
         $prompt = Prompt::get('generate_summary');
 
@@ -41,7 +41,20 @@ class AIService
             'gg_labels' => implode(', ', $ggLabels),
         ]) : $this->getDefaultSummaryPrompt($barcodes, $ggLabels);
 
-        return $this->callOpenAIWithPaths($systemPrompt, $photoPaths, $prompt);
+        // Force Russian language regardless of what's in the DB prompt
+        $systemPrompt .= "\n\n" . <<<INSTRUCTION
+CRITICAL INSTRUCTION OVERRIDE:
+1. The ENTIRE response MUST be in RUSSIAN language.
+2. Translate 'title', 'description', 'color', 'material', 'category' values to RUSSIAN.
+3. Do NOT return English text for description or title.
+INSTRUCTION;
+
+        $response = $this->callOpenAIWithPaths($systemPrompt, $photoPaths, $prompt);
+
+        if (!$response)
+            return null;
+
+        return $this->parseJsonResponse($response);
     }
 
     protected function callOpenAIWithPaths(string $systemPrompt, array $photoPaths, ?Prompt $promptConfig): ?string
@@ -108,7 +121,8 @@ class AIService
             ? $this->callGemini($systemPrompt, $photoUrls, $prompt)
             : $this->callOpenAI($systemPrompt, $photoUrls, $prompt);
 
-        if (!$response) return null;
+        if (!$response)
+            return null;
 
         return $this->parseJsonResponse($response);
     }
@@ -123,7 +137,8 @@ class AIService
             ? $this->callGemini($systemPrompt, $photoUrls, $prompt)
             : $this->callOpenAI($systemPrompt, $photoUrls, $prompt);
 
-        if (!$response) return null;
+        if (!$response)
+            return null;
 
         return $this->parseJsonResponse($response);
     }
@@ -280,7 +295,7 @@ PROMPT;
     protected function getMimeType(string $url): string
     {
         $ext = strtolower(pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
-        return match($ext) {
+        return match ($ext) {
             'png' => 'image/png',
             'gif' => 'image/gif',
             'webp' => 'image/webp',
@@ -326,19 +341,20 @@ PROMPT;
 {$context}
 
 КРИТИЧЕСКИ ВАЖНО:
-- ВСЕ текстовые поля ДОЛЖНЫ быть НА РУССКОМ ЯЗЫКЕ
-- Если есть баркод - используй его для определения точной модели и рыночной цены
+- ВЕСЬ ОТВЕТ ДОЛЖЕН БЫТЬ СТРОГО НА РУССКОМ ЯЗЫКЕ.
+- Название, Описание, Цвет, Материал, Категория - ВСЁ НА РУССКОМ.
+- Если есть баркод - используй его для определения точной модели и рыночной цены.
 
 Верни ТОЛЬКО валидный JSON (без markdown):
 {
-  "title": "Название товара на русском (макс 80 символов)",
-  "description": "Подробное описание НА РУССКОМ для eBay листинга",
+  "title": "Название товара НА РУССКОМ (макс 80 символов)",
+  "description": "Подробное описание товара НА РУССКОМ языке для eBay листинга. Опиши детали, особенности, состояние.",
   "brand": "Бренд",
-  "category": "Категория на русском",
+  "category": "Категория НА РУССКОМ",
   "size": "Размер с бирки",
-  "color": "Цвет на русском",
+  "color": "Цвет НА РУССКОМ",
   "condition": "new или used",
-  "material": "Материал на русском",
+  "material": "Материал НА РУССКОМ",
   "price_estimate": 25.00,
   "price_min": 20.00,
   "price_max": 35.00,
@@ -347,7 +363,7 @@ PROMPT;
 }
 
 Цену оценивай на основе бренда, состояния и типичных цен на eBay.
-ВСЁ НА РУССКОМ!
+ЕЩЕ РАЗ: ВСЕ ТЕКСТОВЫЕ ПОЛЯ ДОЛЖНЫ БЫТЬ НА РУССКОМ ЯЗЫКЕ!
 PROMPT;
     }
 

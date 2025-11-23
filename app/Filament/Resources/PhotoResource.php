@@ -14,7 +14,7 @@ class PhotoResource extends Resource
 {
     protected static ?string $model = Photo::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-photo';
+    protected static ?string $navigationIcon = null;
 
     protected static ?string $navigationLabel = 'Фото';
 

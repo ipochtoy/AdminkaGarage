@@ -42,7 +42,7 @@
     @if($getRecord() && $getRecord()->photos->count() > 0)
         <div style="display: flex; flex-wrap: wrap; gap: 16px;">
             @foreach($getRecord()->photos()->orderBy('order')->get() as $photo)
-                <div style="width: 180px; position: relative; display: flex; flex-direction: column; background-color: #ffffff; border-radius: 8px; border: {{ $photo->is_main ? '2px solid #3b82f6' : '1px solid #e5e7eb' }}; overflow: hidden; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);">
+                <div style="width: 180px; position: relative; display: flex; flex-direction: column; background-color: #ffffff; border-radius: 8px; border: {{ $photo->is_public ? '2px solid #10b981' : ($photo->is_main ? '2px solid #3b82f6' : '1px solid #e5e7eb') }}; overflow: hidden; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);">
                     
                     {{-- Image Area --}}
                     <div style="position: relative; aspect-ratio: 3/4; width: 100%; background-color: #f3f4f6;"
@@ -67,9 +67,22 @@
                             <img src="{{ asset('storage/' . $photo->image) }}?t={{ time() }}" x-on:click.stop>
                         </div>
                         
-                        {{-- Main Badge --}}
+
+
+                        {{-- Public/For Sale Checkbox (Top Left) --}}
+                        <div style="position: absolute; top: 6px; left: 6px; z-index: 10;">
+                            <label style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; font-size: 10px; font-weight: 600; color: #374151;">
+                                <input type="checkbox" 
+                                       wire:click="togglePublic({{ $photo->id }})" 
+                                       {{ $photo->is_public ? 'checked' : '' }}
+                                       style="width: 12px; height: 12px; cursor: pointer;">
+                                На продажу
+                            </label>
+                        </div>
+
+                        {{-- Main Badge (Below Checkbox) --}}
                         @if($photo->is_main)
-                            <div style="position: absolute; top: 6px; left: 6px; background-color: #2563eb; color: white; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">
+                            <div style="position: absolute; top: 30px; left: 6px; background-color: #2563eb; color: white; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.2);">
                                 MAIN
                             </div>
                         @endif

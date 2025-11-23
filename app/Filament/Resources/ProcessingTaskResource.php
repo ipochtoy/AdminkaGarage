@@ -14,7 +14,7 @@ class ProcessingTaskResource extends Resource
 {
     protected static ?string $model = ProcessingTask::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
+    protected static ?string $navigationIcon = null;
 
     protected static ?string $navigationLabel = 'Задачи обработки';
 

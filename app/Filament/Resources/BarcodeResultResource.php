@@ -14,7 +14,7 @@ class BarcodeResultResource extends Resource
 {
     protected static ?string $model = BarcodeResult::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-qr-code';
+    protected static ?string $navigationIcon = null;
 
     protected static ?string $navigationLabel = 'Баркоды';
 
