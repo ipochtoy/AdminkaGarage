@@ -66,42 +66,42 @@
                 }
             }
 
-            // Get eBay prices
-            $ebayService = app(\App\Services\EbayService::class);
-            $searchQuery = $record->brand ?? $record->title ?? null;
-            $barcode = !empty($barcodes) ? $barcodes[0]->data : null;
-
-            if ($searchQuery || $barcode) {
-                $ebayResult = $ebayService->searchProducts(
-                    brand: $record->brand,
-                    title: $record->title,
-                    barcode: $barcode
-                );
-
-                if ($ebayResult) {
-                    if (isset($ebayResult['price_min'])) {
-                        $suggestions[] = [
-                            'source' => 'eBay мин',
-                            'price' => $ebayResult['price_min'],
-                            'type' => 'ebay'
-                        ];
-                    }
-                    if (isset($ebayResult['price'])) {
-                        $suggestions[] = [
-                            'source' => 'eBay медиана',
-                            'price' => $ebayResult['price'],
-                            'type' => 'ebay'
-                        ];
-                    }
-                    if (isset($ebayResult['price_max'])) {
-                        $suggestions[] = [
-                            'source' => 'eBay макс',
-                            'price' => $ebayResult['price_max'],
-                            'type' => 'ebay'
-                        ];
-                    }
-                }
-            }
+            // Get eBay prices (временно отключено - превышен лимит API)
+            // $ebayService = app(\App\Services\EbayService::class);
+            // $searchQuery = $record->brand ?? $record->title ?? null;
+            // $barcode = !empty($barcodes) ? $barcodes[0]->data : null;
+            //
+            // if ($searchQuery || $barcode) {
+            //     $ebayResult = $ebayService->searchProducts(
+            //         brand: $record->brand,
+            //         title: $record->title,
+            //         barcode: $barcode
+            //     );
+            //
+            //     if ($ebayResult) {
+            //         if (isset($ebayResult['price_min'])) {
+            //             $suggestions[] = [
+            //                 'source' => 'eBay мин',
+            //                 'price' => $ebayResult['price_min'],
+            //                 'type' => 'ebay'
+            //             ];
+            //         }
+            //         if (isset($ebayResult['price'])) {
+            //             $suggestions[] = [
+            //                 'source' => 'eBay медиана',
+            //                 'price' => $ebayResult['price'],
+            //                 'type' => 'ebay'
+            //             ];
+            //         }
+            //         if (isset($ebayResult['price_max'])) {
+            //             $suggestions[] = [
+            //                 'source' => 'eBay макс',
+            //                 'price' => $ebayResult['price_max'],
+            //                 'type' => 'ebay'
+            //             ];
+            //         }
+            //     }
+            // }
         }
     @endphp
 

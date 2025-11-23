@@ -54,6 +54,8 @@ return [
 
     'ebay' => [
         'app_id' => env('EBAY_APP_ID'),
+        'sandbox_app_id' => env('EBAY_SANDBOX_APP_ID'),
+        'environment' => env('EBAY_ENVIRONMENT', 'production'),
     ],
 
     'pochtoy' => [

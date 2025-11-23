@@ -114,7 +114,7 @@ class PhotoBatchResource extends Resource
                             ->required()
                             ->maxLength(500)
                             ->columnSpanFull(),
-                        
+
                         Forms\Components\Textarea::make('description')
                             ->label('Описание')
                             ->rows(5)
@@ -125,38 +125,110 @@ class PhotoBatchResource extends Resource
                             'sm' => 2,
                             'md' => 4,
                         ])
-                        ->schema([
-                            Forms\Components\TextInput::make('price')
-                                ->label('Цена')
-                                ->numeric()
-                                ->prefix('$'),
-                            Forms\Components\Select::make('condition')
-                                ->label('Состояние')
-                                ->options([
-                                    'new' => 'Новое',
-                                    'used' => 'Б/у',
-                                    'refurbished' => 'Восстановленное',
-                                ]),
-                            Forms\Components\TextInput::make('brand')
-                                ->label('Бренд')
-                                ->maxLength(200),
-                            Forms\Components\TextInput::make('category')
-                                ->label('Категория')
-                                ->maxLength(200),
-                            Forms\Components\TextInput::make('size')
-                                ->label('Размер')
-                                ->maxLength(100),
-                            Forms\Components\TextInput::make('color')
-                                ->label('Цвет')
-                                ->maxLength(100),
-                            Forms\Components\TextInput::make('sku')
-                                ->label('SKU')
-                                ->maxLength(200),
-                            Forms\Components\TextInput::make('quantity')
-                                ->label('Кол-во')
-                                ->numeric()
-                                ->default(1),
-                        ]),
+                            ->schema([
+                                Forms\Components\TextInput::make('price')
+                                    ->label('Цена')
+                                    ->numeric()
+                                    ->prefix('$')
+                                    ->hintAction(
+                                        Forms\Components\Actions\Action::make('search_ebay')
+                                            ->label('Найти на eBay')
+                                            ->icon('heroicon-m-magnifying-glass')
+                                            ->modalHeading('Поиск цены на eBay')
+                                            ->modalSubmitActionLabel('Применить цену')
+                                            ->form([
+                                                Forms\Components\Radio::make('search_type')
+                                                    ->label('Тип поиска')
+                                                    ->options([
+                                                        'keyword' => 'По названию',
+                                                        'image' => 'По фото',
+                                                    ])
+                                                    ->default('keyword')
+                                                    ->live(),
+                                                Forms\Components\Select::make('ebay_item')
+                                                    ->label('Выберите товар')
+                                                    ->searchable()
+                                                    ->getSearchResultsUsing(function (string $search, $get, $livewire) {
+                                                        $service = new \App\Services\EbayService();
+                                                        $searchType = $get('search_type');
+
+                                                        if ($searchType === 'image') {
+                                                            $record = $livewire->getRecord();
+                                                            if (!$record || $record->photos->isEmpty()) {
+                                                                return [];
+                                                            }
+                                                            // Use the first photo
+                                                            $results = $service->searchByImage($record->photos->first()->image);
+                                                        } else {
+                                                            if (empty($search)) {
+                                                                // Default to title if search is empty
+                                                                $record = $livewire->getRecord();
+                                                                $search = $record->title ?? '';
+                                                            }
+                                                            if (empty($search)) {
+                                                                return [];
+                                                            }
+                                                            $results = $service->searchByKeyword($search);
+                                                        }
+
+                                                        return collect($results)->mapWithKeys(function ($item) {
+                                                            $price = $item['price']['value'];
+                                                            $currency = $item['price']['currency'];
+                                                            $title = $item['title'];
+                                                            $image = $item['image'];
+
+                                                            // Format option with HTML (requires allowHtml() on Select)
+                                                            $label = "<div class='flex items-center gap-2'>
+                                                            <img src='{$image}' class='w-8 h-8 object-cover rounded'>
+                                                            <div class='flex flex-col text-left'>
+                                                                <span class='text-xs font-medium truncate w-64'>{$title}</span>
+                                                                <span class='text-xs text-gray-500'>{$price} {$currency}</span>
+                                                            </div>
+                                                        </div>";
+
+                                                            // Value is the price
+                                                            return [$price => $label];
+                                                        })->toArray();
+                                                    })
+                                                    ->allowHtml()
+                                                    ->required(),
+                                            ])
+                                            ->action(function (array $data, $set) {
+                                                $set('price', $data['ebay_item']);
+
+                                                \Filament\Notifications\Notification::make()
+                                                    ->title('Price updated from eBay')
+                                                    ->success()
+                                                    ->send();
+                                            })
+                                    ),
+                                Forms\Components\Select::make('condition')
+                                    ->label('Состояние')
+                                    ->options([
+                                        'new' => 'Новое',
+                                        'used' => 'Б/у',
+                                        'refurbished' => 'Восстановленное',
+                                    ]),
+                                Forms\Components\TextInput::make('brand')
+                                    ->label('Бренд')
+                                    ->maxLength(200),
+                                Forms\Components\TextInput::make('category')
+                                    ->label('Категория')
+                                    ->maxLength(200),
+                                Forms\Components\TextInput::make('size')
+                                    ->label('Размер')
+                                    ->maxLength(100),
+                                Forms\Components\TextInput::make('color')
+                                    ->label('Цвет')
+                                    ->maxLength(100),
+                                Forms\Components\TextInput::make('sku')
+                                    ->label('SKU')
+                                    ->maxLength(200),
+                                Forms\Components\TextInput::make('quantity')
+                                    ->label('Кол-во')
+                                    ->numeric()
+                                    ->default(1),
+                            ]),
                     ]),
 
                 // 6. Preview Button
@@ -186,18 +258,18 @@ class PhotoBatchResource extends Resource
                 // 5. Tech Info (Collapsed)
                 Forms\Components\Section::make('Техническая информация')
                     ->schema([
-                         Forms\Components\Grid::make(3)->schema([
+                        Forms\Components\Grid::make(3)->schema([
                             Forms\Components\TextInput::make('correlation_id')->label('ID')->disabled(),
                             Forms\Components\Select::make('status')
                                 ->label('Статус')
-                                ->options(['pending'=>'Ожидает', 'processed'=>'Обработано', 'failed'=>'Ошибка'])
+                                ->options(['pending' => 'Ожидает', 'processed' => 'Обработано', 'failed' => 'Ошибка'])
                                 ->required(),
                             Forms\Components\TextInput::make('chat_id')->label('Chat ID')->disabled(),
-                         ]),
-                         Forms\Components\Grid::make(2)->schema([
-                             Forms\Components\DateTimePicker::make('uploaded_at')->label('Загружено')->disabled(),
-                             Forms\Components\DateTimePicker::make('processed_at')->label('Обработано')->disabled(),
-                         ]),
+                        ]),
+                        Forms\Components\Grid::make(2)->schema([
+                            Forms\Components\DateTimePicker::make('uploaded_at')->label('Загружено')->disabled(),
+                            Forms\Components\DateTimePicker::make('processed_at')->label('Обработано')->disabled(),
+                        ]),
                     ])
                     ->collapsed()
                     ->columnSpanFull(),
@@ -322,7 +394,8 @@ class PhotoBatchResource extends Resource
     protected static function generateAIDescription($set, $livewire, string $provider): void
     {
         $record = $livewire->getRecord();
-        if (!$record) return;
+        if (!$record)
+            return;
 
         $photos = $record->photos;
         if ($photos->isEmpty()) {

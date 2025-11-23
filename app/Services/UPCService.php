@@ -75,19 +75,11 @@ class UPCService
 
         $suggestions = [];
 
-        if ($result['lowest_price']) {
-            $suggestions['upc_lowest'] = [
-                'source' => 'UPCitemdb (мин)',
-                'price' => $result['lowest_price'],
-            ];
-        }
+        // Get first product image for preview (only for first offer)
+        $previewImage = !empty($result['images']) ? $result['images'][0] : null;
 
-        if ($result['highest_price']) {
-            $suggestions['upc_highest'] = [
-                'source' => 'UPCitemdb (макс)',
-                'price' => $result['highest_price'],
-            ];
-        }
+        // Skip historical min/max prices - they are outdated and unreliable
+        // Only use current offers from stores
 
         foreach ($result['offers'] as $i => $offer) {
             if ($offer['price']) {
@@ -95,6 +87,7 @@ class UPCService
                     'source' => $offer['merchant'],
                     'price' => $offer['price'],
                     'link' => $offer['link'],
+                    'image' => ($i === 0) ? $previewImage : null, // Only first offer gets image
                 ];
             }
         }

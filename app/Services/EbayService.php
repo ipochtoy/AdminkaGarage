@@ -3,188 +3,129 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class EbayService
 {
-    protected string $appId;
+    protected string $clientId;
+    protected string $clientSecret;
+    protected string $baseUrl = 'https://api.ebay.com/buy/browse/v1';
+    protected string $authUrl = 'https://api.ebay.com/identity/v1/oauth2/token';
+    protected string $scope = 'https://api.ebay.com/oauth/api_scope';
 
     public function __construct()
     {
-        $this->appId = config('services.ebay.app_id', '');
+        // Using keys provided by user directly in code for now, 
+        // ideally these should be in .env
+        $this->clientId = config('services.ebay.client_id') ?? 'DzianisM-Shoestes-PRD-f6e49d341-f06ff5f5';
+        $this->clientSecret = config('services.ebay.client_secret') ?? 'PRD-6e49d341367f-71ae-440b-93ef-daed';
     }
 
-    public function searchProducts(
-        ?string $brand = null,
-        ?string $model = null,
-        ?string $barcode = null,
-        ?string $title = null,
-        ?string $categoryId = null
-    ): ?array {
-        if (!$this->appId) {
-            Log::warning('eBay App ID not configured');
-            return null;
-        }
+    protected function getAccessToken(): ?string
+    {
+        return Cache::remember('ebay_access_token', 3500, function () {
+            try {
+                $response = Http::asForm()
+                    ->withBasicAuth($this->clientId, $this->clientSecret)
+                    ->post($this->authUrl, [
+                        'grant_type' => 'client_credentials',
+                        'scope' => $this->scope,
+                    ]);
 
-        // Build search query
-        $keywords = [];
-        if ($brand && $model) {
-            $keywords = [$brand, $model];
-        } elseif ($brand) {
-            $keywords[] = $brand;
-        } elseif ($title) {
-            $keywords = array_slice(explode(' ', $title), 0, 5);
-        } elseif ($barcode) {
-            $keywords[] = $barcode;
-        }
+                if ($response->failed()) {
+                    Log::error('eBay Auth Failed: ' . $response->body());
+                    return null;
+                }
 
-        if (empty($keywords)) {
-            return null;
-        }
+                return $response->json('access_token');
+            } catch (\Exception $e) {
+                Log::error('eBay Auth Exception: ' . $e->getMessage());
+                return null;
+            }
+        });
+    }
 
-        $searchQuery = implode(' ', array_slice($keywords, 0, 10));
-
-        // Add barcode to search if available
-        if ($barcode && strlen($barcode) >= 8) {
-            $searchQuery = trim("{$searchQuery} {$barcode}");
-        }
-
-        $params = [
-            'OPERATION-NAME' => 'findItemsAdvanced',
-            'SERVICE-VERSION' => '1.0.0',
-            'SECURITY-APPNAME' => $this->appId,
-            'RESPONSE-DATA-FORMAT' => 'JSON',
-            'REST-PAYLOAD' => '',
-            'keywords' => $searchQuery,
-            'paginationInput.entriesPerPage' => '20',
-            'sortOrder' => 'PricePlusShippingLowest',
-            'itemFilter(0).name' => 'ListingType',
-            'itemFilter(0).value' => 'FixedPrice',
-        ];
-
-        if ($categoryId) {
-            $params['categoryId'] = $categoryId;
+    public function searchByKeyword(string $query, int $limit = 10): array
+    {
+        $token = $this->getAccessToken();
+        if (!$token) {
+            return [];
         }
 
         try {
-            Log::info("[eBay] Searching for: {$searchQuery}");
+            $response = Http::withToken($token)
+                ->get("{$this->baseUrl}/item_summary/search", [
+                    'q' => $query,
+                    'limit' => $limit,
+                    'filter' => 'priceCurrency:USD', // Filter for USD items if needed
+                ]);
 
-            $response = Http::timeout(15)
-                ->get('https://svcs.ebay.com/services/search/FindingService/v1', $params);
-
-            if (!$response->successful()) {
-                Log::error("[eBay] API error", ['status' => $response->status()]);
-                return null;
+            if ($response->failed()) {
+                Log::error('eBay Search Failed: ' . $response->body());
+                return [];
             }
 
-            $data = $response->json();
-            $items = $data['findItemsAdvancedResponse'][0]['searchResult'][0]['item'] ?? [];
-
-            if (empty($items)) {
-                Log::info("[eBay] No items found");
-                return null;
-            }
-
-            return $this->parseItems($items);
+            return $this->formatResults($response->json('itemSummaries') ?? []);
 
         } catch (\Exception $e) {
-            Log::error("[eBay] Error", ['error' => $e->getMessage()]);
-            return null;
+            Log::error('eBay Search Exception: ' . $e->getMessage());
+            return [];
         }
     }
 
-    protected function parseItems(array $items): array
+    public function searchByImage(string $imagePath, int $limit = 10): array
     {
-        $prices = [];
-        $images = [];
-        $titles = [];
-        $urls = [];
-        $comps = [];
+        $token = $this->getAccessToken();
+        if (!$token) {
+            return [];
+        }
 
-        foreach (array_slice($items, 0, 20) as $item) {
-            try {
-                $priceElem = $item['sellingStatus'][0]['currentPrice'][0] ?? null;
-                if (!$priceElem) continue;
+        $fullPath = Storage::disk('public')->path($imagePath);
+        if (!file_exists($fullPath)) {
+            Log::error('eBay Image Search: File not found - ' . $fullPath);
+            return [];
+        }
 
-                $price = (float) ($priceElem['__value__'] ?? 0);
-                if ($price <= 0) continue;
+        try {
+            // eBay expects a JSON payload with 'image' as base64
+            $base64Image = base64_encode(file_get_contents($fullPath));
 
-                $prices[] = $price;
+            $response = Http::withToken($token)
+                ->post("{$this->baseUrl}/item_summary/search_by_image", [
+                    'image' => $base64Image,
+                    'limit' => $limit,
+                    'filter' => 'priceCurrency:USD',
+                ]);
 
-                // Shipping cost
-                $shippingCost = 0;
-                $shippingInfo = $item['shippingInfo'][0] ?? null;
-                if ($shippingInfo) {
-                    $shippingCostElem = $shippingInfo['shippingServiceCost'][0] ?? null;
-                    if ($shippingCostElem) {
-                        $shippingCost = (float) ($shippingCostElem['__value__'] ?? 0);
-                    }
-                }
-
-                // Image URL
-                $galleryUrl = $item['galleryURL'][0] ?? '';
-                if ($galleryUrl && str_starts_with($galleryUrl, 'http')) {
-                    // Upgrade to larger image
-                    $galleryUrl = str_replace(['s-l64', 's-l140', 's-l225'], 's-l500', $galleryUrl);
-                    if (!in_array($galleryUrl, $images)) {
-                        $images[] = $galleryUrl;
-                    }
-                }
-
-                // Title
-                $itemTitle = $item['title'][0] ?? '';
-                if ($itemTitle) {
-                    $titles[] = $itemTitle;
-                }
-
-                // URL
-                $viewUrl = $item['viewItemURL'][0] ?? '';
-                if ($viewUrl) {
-                    $urls[] = $viewUrl;
-                }
-
-                // Comps data
-                $comps[] = [
-                    'item_id' => $item['itemId'][0] ?? '',
-                    'title' => $itemTitle,
-                    'price' => $price,
-                    'shipping_cost' => $shippingCost,
-                    'total_price' => $price + $shippingCost,
-                    'url' => $viewUrl,
-                    'image_url' => $galleryUrl,
-                ];
-
-            } catch (\Exception $e) {
-                continue;
+            if ($response->failed()) {
+                Log::error('eBay Image Search Failed: ' . $response->body());
+                return [];
             }
+
+            return $this->formatResults($response->json('itemSummaries') ?? []);
+
+        } catch (\Exception $e) {
+            Log::error('eBay Image Search Exception: ' . $e->getMessage());
+            return [];
         }
+    }
 
-        $result = [];
-
-        if ($prices) {
-            sort($prices);
-            $result['price'] = $prices[count($prices) / 2]; // median
-            $result['price_min'] = min($prices);
-            $result['price_max'] = max($prices);
-            $result['price_count'] = count($prices);
-        }
-
-        if ($images) {
-            $result['images'] = array_slice($images, 0, 20);
-        }
-
-        if ($titles) {
-            $result['titles'] = array_slice($titles, 0, 10);
-        }
-
-        if ($urls) {
-            $result['urls'] = array_slice($urls, 0, 10);
-        }
-
-        if ($comps) {
-            $result['comps'] = array_slice($comps, 0, 10);
-        }
-
-        return $result ?: null;
+    protected function formatResults(array $items): array
+    {
+        return array_map(function ($item) {
+            return [
+                'itemId' => $item['itemId'] ?? null,
+                'title' => $item['title'] ?? 'Unknown Title',
+                'price' => [
+                    'value' => $item['price']['value'] ?? 0,
+                    'currency' => $item['price']['currency'] ?? 'USD',
+                ],
+                'image' => $item['image']['imageUrl'] ?? null,
+                'url' => $item['itemWebUrl'] ?? '#',
+                'condition' => $item['condition'] ?? 'Unknown',
+            ];
+        }, $items);
     }
 }
