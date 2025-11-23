@@ -72,7 +72,7 @@ class GeminiService
                     'temperature' => 0.4,
                     'topK' => 32,
                     'topP' => 1,
-                    'maxOutputTokens' => 2048,
+                    'maxOutputTokens' => 8192,  // Increased from 2048 to prevent truncation
                     'responseMimeType' => 'application/json',
                 ],
             ]);
