@@ -140,10 +140,19 @@ class PhotoBatchResource extends Resource
                                                 Forms\Components\Radio::make('search_type')
                                                     ->label('Тип поиска')
                                                     ->options([
+                                                        'barcode' => 'По штрихкоду',
                                                         'keyword' => 'По названию',
                                                         'image' => 'По фото',
                                                     ])
-                                                    ->default('keyword')
+                                                    ->default(function ($livewire) {
+                                                        $record = $livewire->getRecord();
+                                                        // Check if any photo has barcodes
+                                                        $hasBarcodes = $record && \App\Models\BarcodeResult::whereHas('photo', function ($query) use ($record) {
+                                                            $query->where('photo_batch_id', $record->id);
+                                                        })->exists();
+
+                                                        return $hasBarcodes ? 'barcode' : 'keyword';
+                                                    })
                                                     ->live(),
                                                 Forms\Components\Select::make('ebay_item')
                                                     ->label('Выберите товар')
@@ -151,18 +160,28 @@ class PhotoBatchResource extends Resource
                                                     ->getSearchResultsUsing(function (string $search, $get, $livewire) {
                                                         $service = new \App\Services\EbayService();
                                                         $searchType = $get('search_type');
+                                                        $record = $livewire->getRecord();
 
                                                         if ($searchType === 'image') {
-                                                            $record = $livewire->getRecord();
                                                             if (!$record || $record->photos->isEmpty()) {
                                                                 return [];
                                                             }
-                                                            // Use the first photo
                                                             $results = $service->searchByImage($record->photos->first()->image);
+                                                        } elseif ($searchType === 'barcode') {
+                                                            // Try to find barcode from record if search is empty
+                                                            if (empty($search) && $record) {
+                                                                $barcode = \App\Models\BarcodeResult::whereHas('photo', function ($query) use ($record) {
+                                                                    $query->where('photo_batch_id', $record->id);
+                                                                })->first();
+                                                                $search = $barcode ? $barcode->data : '';
+                                                            }
+
+                                                            if (empty($search)) {
+                                                                return [];
+                                                            }
+                                                            $results = $service->searchByBarcode($search);
                                                         } else {
                                                             if (empty($search)) {
-                                                                // Default to title if search is empty
-                                                                $record = $livewire->getRecord();
                                                                 $search = $record->title ?? '';
                                                             }
                                                             if (empty($search)) {
@@ -177,7 +196,6 @@ class PhotoBatchResource extends Resource
                                                             $title = $item['title'];
                                                             $image = $item['image'];
 
-                                                            // Format option with HTML (requires allowHtml() on Select)
                                                             $label = "<div class='flex items-center gap-2'>
                                                             <img src='{$image}' class='w-8 h-8 object-cover rounded'>
                                                             <div class='flex flex-col text-left'>
@@ -186,7 +204,6 @@ class PhotoBatchResource extends Resource
                                                             </div>
                                                         </div>";
 
-                                                            // Value is the price
                                                             return [$price => $label];
                                                         })->toArray();
                                                     })

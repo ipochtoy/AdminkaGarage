@@ -66,42 +66,48 @@
                 }
             }
 
-            // Get eBay prices (временно отключено - превышен лимит API)
-            // $ebayService = app(\App\Services\EbayService::class);
-            // $searchQuery = $record->brand ?? $record->title ?? null;
-            // $barcode = !empty($barcodes) ? $barcodes[0]->data : null;
-            //
-            // if ($searchQuery || $barcode) {
-            //     $ebayResult = $ebayService->searchProducts(
-            //         brand: $record->brand,
-            //         title: $record->title,
-            //         barcode: $barcode
-            //     );
-            //
-            //     if ($ebayResult) {
-            //         if (isset($ebayResult['price_min'])) {
-            //             $suggestions[] = [
-            //                 'source' => 'eBay мин',
-            //                 'price' => $ebayResult['price_min'],
-            //                 'type' => 'ebay'
-            //             ];
-            //         }
-            //         if (isset($ebayResult['price'])) {
-            //             $suggestions[] = [
-            //                 'source' => 'eBay медиана',
-            //                 'price' => $ebayResult['price'],
-            //                 'type' => 'ebay'
-            //             ];
-            //         }
-            //         if (isset($ebayResult['price_max'])) {
-            //             $suggestions[] = [
-            //                 'source' => 'eBay макс',
-            //                 'price' => $ebayResult['price_max'],
-            //                 'type' => 'ebay'
-            //             ];
-            //         }
-            //     }
-            // }
+            // Get eBay prices using Browse API
+            $ebayService = app(\App\Services\EbayService::class);
+            $barcode = !empty($barcodes) ? $barcodes[0]->data : null;
+            
+            // Try searching by barcode first, then by keyword
+            $ebayItems = [];
+            if ($barcode) {
+                $ebayItems = $ebayService->searchByBarcode($barcode, 20);
+            }
+            if (empty($ebayItems) && $record->title) {
+                $searchQuery = trim(($record->brand ?? '') . ' ' . ($record->title ?? ''));
+                if ($searchQuery) {
+                    $ebayItems = $ebayService->searchByKeyword($searchQuery, 20);
+                }
+            }
+
+            if (!empty($ebayItems)) {
+                $prices = array_map(fn($item) => (float)$item['price']['value'], $ebayItems);
+                
+                if (count($prices) > 0) {
+                    sort($prices);
+                    $minPrice = $prices[0];
+                    $maxPrice = end($prices);
+                    $medianPrice = $prices[floor(count($prices) / 2)];
+                    
+                    $suggestions[] = [
+                        'source' => 'eBay мин',
+                        'price' => $minPrice,
+                        'type' => 'ebay'
+                    ];
+                    $suggestions[] = [
+                        'source' => 'eBay медиана',
+                        'price' => $medianPrice,
+                        'type' => 'ebay'
+                    ];
+                    $suggestions[] = [
+                        'source' => 'eBay макс',
+                        'price' => $maxPrice,
+                        'type' => 'ebay'
+                    ];
+                }
+            }
         }
     @endphp
 

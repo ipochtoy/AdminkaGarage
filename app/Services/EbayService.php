@@ -49,30 +49,42 @@ class EbayService
 
     public function searchByKeyword(string $query, int $limit = 10): array
     {
-        $token = $this->getAccessToken();
-        if (!$token) {
-            return [];
-        }
-
-        try {
-            $response = Http::withToken($token)
-                ->get("{$this->baseUrl}/item_summary/search", [
-                    'q' => $query,
-                    'limit' => $limit,
-                    'filter' => 'priceCurrency:USD', // Filter for USD items if needed
-                ]);
-
-            if ($response->failed()) {
-                Log::error('eBay Search Failed: ' . $response->body());
+        $cacheKey = 'ebay_keyword_' . md5($query . $limit);
+        
+        return Cache::remember($cacheKey, now()->addHours(24), function () use ($query, $limit) {
+            $token = $this->getAccessToken();
+            if (!$token) {
                 return [];
             }
 
-            return $this->formatResults($response->json('itemSummaries') ?? []);
+            try {
+                Log::info("[eBay Browse API] Searching by keyword: {$query}");
+                
+                $response = Http::withToken($token)
+                    ->get("{$this->baseUrl}/item_summary/search", [
+                        'q' => $query,
+                        'limit' => $limit,
+                        'filter' => 'priceCurrency:USD',
+                    ]);
 
-        } catch (\Exception $e) {
-            Log::error('eBay Search Exception: ' . $e->getMessage());
-            return [];
-        }
+                if ($response->failed()) {
+                    Log::error('[eBay Browse API] Search Failed', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    return [];
+                }
+
+                $results = $this->formatResults($response->json('itemSummaries') ?? []);
+                Log::info("[eBay Browse API] Found " . count($results) . " items");
+                
+                return $results;
+
+            } catch (\Exception $e) {
+                Log::error('[eBay Browse API] Search Exception: ' . $e->getMessage());
+                return [];
+            }
+        });
     }
 
     public function searchByImage(string $imagePath, int $limit = 10): array
@@ -110,6 +122,46 @@ class EbayService
             Log::error('eBay Image Search Exception: ' . $e->getMessage());
             return [];
         }
+    }
+
+    public function searchByBarcode(string $barcode, int $limit = 10): array
+    {
+        $cacheKey = 'ebay_barcode_' . md5($barcode . $limit);
+        
+        return Cache::remember($cacheKey, now()->addHours(24), function () use ($barcode, $limit) {
+            $token = $this->getAccessToken();
+            if (!$token) {
+                return [];
+            }
+
+            try {
+                Log::info("[eBay Browse API] Searching by barcode: {$barcode}");
+                
+                $response = Http::withToken($token)
+                    ->get("{$this->baseUrl}/item_summary/search", [
+                        'q' => $barcode,
+                        'limit' => $limit,
+                        'filter' => 'priceCurrency:USD',
+                    ]);
+
+                if ($response->failed()) {
+                    Log::error('[eBay Browse API] Barcode Search Failed', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    return [];
+                }
+
+                $results = $this->formatResults($response->json('itemSummaries') ?? []);
+                Log::info("[eBay Browse API] Found " . count($results) . " items");
+                
+                return $results;
+
+            } catch (\Exception $e) {
+                Log::error('[eBay Browse API] Barcode Search Exception: ' . $e->getMessage());
+                return [];
+            }
+        });
     }
 
     protected function formatResults(array $items): array
