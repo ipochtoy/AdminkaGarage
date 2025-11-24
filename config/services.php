@@ -53,9 +53,23 @@ return [
     ],
 
     'ebay' => [
+        'client_id' => env('EBAY_CLIENT_ID', env('EBAY_APP_ID')),
+        'client_secret' => env('EBAY_CLIENT_SECRET', env('EBAY_CERT_ID')),
+        'refresh_token' => env('EBAY_REFRESH_TOKEN'),
+        'environment' => env('EBAY_ENVIRONMENT', 'sandbox'),
+        // Business policies for listings
+        'fulfillment_policy_id' => env('EBAY_FULFILLMENT_POLICY_ID'),
+        'payment_policy_id' => env('EBAY_PAYMENT_POLICY_ID'),
+        'return_policy_id' => env('EBAY_RETURN_POLICY_ID'),
+        // Legacy for Browse API
         'app_id' => env('EBAY_APP_ID'),
         'sandbox_app_id' => env('EBAY_SANDBOX_APP_ID'),
-        'environment' => env('EBAY_ENVIRONMENT', 'production'),
+    ],
+
+    'shopify' => [
+        'shop_domain' => env('SHOPIFY_SHOP_DOMAIN'), // your-shop.myshopify.com
+        'access_token' => env('SHOPIFY_ACCESS_TOKEN'),
+        'api_version' => env('SHOPIFY_API_VERSION', '2024-01'),
     ],
 
     'pochtoy' => [

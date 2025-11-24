@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class PhotoBatch extends Model
 {
@@ -74,5 +75,40 @@ class PhotoBatch extends Model
             }
         }
         return $barcodes;
+    }
+
+    public function listings(): HasMany
+    {
+        return $this->hasMany(ProductListing::class);
+    }
+
+    public function product(): HasOne
+    {
+        return $this->hasOne(Product::class);
+    }
+
+    public function getListingFor(string $platform): ?ProductListing
+    {
+        return $this->listings()->where('platform', $platform)->first();
+    }
+
+    public function isListedOn(string $platform): bool
+    {
+        $listing = $this->getListingFor($platform);
+        return $listing && $listing->isPublished();
+    }
+
+    public function getListingStatus(string $platform): ?string
+    {
+        $listing = $this->getListingFor($platform);
+        return $listing?->status;
+    }
+
+    public function getPublishedPlatforms(): array
+    {
+        return $this->listings()
+            ->where('status', ProductListing::STATUS_PUBLISHED)
+            ->pluck('platform')
+            ->toArray();
     }
 }
