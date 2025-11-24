@@ -1,59 +1,404 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# 🏪 AdminkaGarage - Админка для Гаражной Распродажи
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> Веб-приложение для управления товарами гаражной распродажи с AI-генерацией описаний, поиском цен и обработкой фото.
 
-## About Laravel
+## 📋 Описание проекта
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+AdminkaGarage - это полнофункциональная система управления товарами для гаражной распродажи. Система позволяет:
+- Загружать фото товаров через Telegram бот или веб-интерфейс
+- Автоматически генерировать описания товаров с помощью AI (Gemini 3 Pro / GPT-4o)
+- Сканировать баркоды и получать информацию о товарах
+- Автоматически находить цены на товары из различных источников (UPCitemdb, eBay)
+- Обрабатывать фото товаров с помощью FASHN AI для создания моделей
+- Управлять карточками товаров и выставлять их на продажу
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 🚀 Технологии
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Backend**: Laravel 12, PHP 8.3+
+- **Admin Panel**: Filament 3
+- **Database**: MySQL/PostgreSQL
+- **AI Services**: 
+  - Google Gemini 3 Pro (описания товаров)
+  - OpenAI GPT-4o (альтернатива)
+  - FASHN AI (обработка фото)
+- **Price APIs**:
+  - UPCitemdb (поиск по баркодам)
+  - eBay Browse API (рыночные цены)
+- **Barcode Scanning**: Google Cloud Vision, ZBar
 
-## Learning Laravel
+## 📦 Основные возможности
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### 🎯 Карточки товаров (Photo Batches)
+- Загрузка фото через Telegram или веб-интерфейс
+- Автоматическое сканирование баркодов на фото
+- AI-генерация названия, описания, категории, размера, цвета
+- Оценка цены товара с помощью AI
+- Превью товара с возможностью редактирования
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 💰 Рекомендации по цене
+- Автоматический поиск цен на товары по баркодам
+- Интеграция с магазинами: 6pm, Zappos, Moosejaw, Home Depot
+- Поиск цен на eBay (мин/медиана/макс)
+- Автоматический расчёт "гаражной цены" (-20% от магазинной)
+- Превью фото товаров из магазинов
 
-## Laravel Sponsors
+### 🤖 AI Ассистент
+- **Gemini 3 Pro**: быстрая генерация описаний
+- **OpenAI GPT-4o**: более качественные описания
+- Голосовая правка описаний
+- Извлечение баркодов и артикулов из фото
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### 📸 Обработка фото
+- Автоматическое удаление фона
+- Обрезка и оптимизация изображений
+- Генерация AI-моделей через FASHN
+- Пакетная обработка фотографий
+- Поддержка Magic Editor для улучшения качества
 
-### Premium Partners
+### 🏪 Гараж (Products)
+- Управление товарами на продажу
+- Статусы товаров (активный/черновик/продан)
+- Привязка к карточкам товаров
+- Публичные страницы товаров
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 📊 Dashboard со статистикой
+- 7 карточек с метриками:
+  - Всего карточек товаров (+ новые за период)
+  - Обработано карточек (% от всех)
+  - Товаров на продажу (+ новые)
+  - Загружено фото (+ новые)
+  - Обработано в FASHN (%)
+  - Стоимость товаров на складе
+  - Продано товаров + выручка
+- Фильтры: Сегодня / Неделя / Месяц
+- Графики динамики создания товаров
+- График динамики стоимости товаров
 
-## Contributing
+### 📤 Буфер фото
+- Временное хранилище загруженных фото
+- Пакетное создание карточек товаров
+- Сортировка и фильтрация
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 📥 Массовая загрузка
+- Загрузка ZIP-архивов с фото
+- Автоматическая обработка пакетов
+- Создание карточек в один клик
 
-## Code of Conduct
+## 🛠️ Установка и настройка
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Требования
+- PHP 8.3+
+- Composer
+- Node.js 18+ и npm
+- MySQL 8.0+ или PostgreSQL 14+
+- Redis (опционально, для кеша)
 
-## Security Vulnerabilities
+### Шаг 1: Клонирование проекта
+```bash
+git clone https://github.com/ipochtoy/AdminkaGarage.git
+cd AdminkaGarage
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Шаг 2: Установка зависимостей
+```bash
+# Composer
+composer install
 
-## License
+# NPM
+npm install
+npm run build
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Шаг 3: Настройка окружения
+```bash
+# Копируем .env
+cp .env.example .env
+
+# Генерируем ключ приложения
+php artisan key:generate
+
+# Создаем symlink для storage
+php artisan storage:link
+```
+
+### Шаг 4: Настройка базы данных
+Отредактируй `.env`:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=adminkagarage
+DB_USERNAME=root
+DB_PASSWORD=your_password
+```
+
+Запусти миграции:
+```bash
+php artisan migrate
+```
+
+### Шаг 5: Создание админа
+```bash
+php artisan make:filament-user
+```
+
+### Шаг 6: Настройка API ключей
+
+#### Google Gemini (обязательно)
+```env
+GEMINI_API_KEY=your_gemini_api_key
+```
+Получить: https://makersuite.google.com/app/apikey
+
+#### OpenAI (опционально)
+```env
+OPENAI_API_KEY=sk-your_openai_api_key
+```
+
+#### eBay API (для поиска цен)
+```env
+# Production
+EBAY_APP_ID=your_production_app_id
+EBAY_CERT_ID=your_production_cert_id
+
+# Sandbox (для тестов)
+EBAY_SANDBOX_APP_ID=your_sandbox_app_id
+EBAY_SANDBOX_CERT_ID=your_sandbox_cert_id
+
+# Окружение: production или sandbox
+EBAY_ENVIRONMENT=production
+```
+Получить: https://developer.ebay.com/my/keys
+
+#### UPCitemdb (для поиска по баркодам)
+```env
+UPC_API_KEY=your_upc_api_key
+```
+Получить: https://www.upcitemdb.com/wp/api/
+
+#### Google Cloud Vision (опционально, для сканирования баркодов)
+```env
+GOOGLE_CLOUD_VISION_KEY=your_google_vision_key
+```
+
+#### FASHN AI (опционально)
+```env
+FASHN_API_KEY=your_fashn_api_key
+```
+
+### Шаг 7: Запуск проекта
+```bash
+# Development server
+php artisan serve
+
+# Queue worker (для фоновых задач)
+php artisan queue:work
+
+# Scheduler (для cron-задач)
+php artisan schedule:work
+```
+
+Админка доступна по адресу: `http://localhost:8000/admin`
+
+## 📁 Структура проекта
+
+```
+AdminkaGarage/
+├── app/
+│   ├── Filament/
+│   │   ├── Resources/          # Ресурсы для админки
+│   │   │   ├── PhotoBatchResource.php
+│   │   │   ├── ProductResource.php
+│   │   │   └── PhotoBufferResource.php
+│   │   └── Widgets/            # Виджеты для Dashboard
+│   │       ├── StatsOverview.php
+│   │       ├── ProductsChart.php
+│   │       └── RevenueChart.php
+│   ├── Models/                 # Eloquent модели
+│   │   ├── PhotoBatch.php
+│   │   ├── Product.php
+│   │   ├── Photo.php
+│   │   └── BarcodeResult.php
+│   └── Services/               # Сервисы для работы с API
+│       ├── GeminiService.php   # AI генерация описаний
+│       ├── EbayService.php     # Поиск цен на eBay
+│       └── UPCService.php      # Поиск по баркодам
+├── database/
+│   └── migrations/             # Миграции БД
+├── resources/
+│   └── views/
+│       ├── filament/           # Кастомные компоненты Filament
+│       └── product-card.blade.php  # Публичная карточка товара
+├── public/
+│   └── storage/               # Публичные файлы (фото)
+└── storage/
+    └── app/public/            # Загруженные файлы
+```
+
+## 🔧 Основные команды
+
+```bash
+# Очистка кеша
+php artisan cache:clear
+php artisan view:clear
+php artisan config:clear
+
+# Обновление Filament
+php artisan filament:upgrade
+php artisan filament:cache-components
+
+# Создание админа
+php artisan make:filament-user
+
+# Запуск тестов
+php artisan test
+
+# Backup БД
+php artisan db:backup
+```
+
+## 🎨 Customization
+
+### Изменение логотипа
+Замени файл `public/favicon.jpg`
+
+### Изменение цветовой схемы
+В `app/Providers/Filament/AdminPanelProvider.php`:
+```php
+->colors([
+    'primary' => Color::Blue,  // Измени цвет
+])
+```
+
+### Добавление новых промптов
+Админка → Prompts → New Prompt
+
+## 📝 Workflow
+
+1. **Загрузка фото** → Буфер фото → Выбрать → Создать карточку
+2. **Создание карточки** → AI генерация → Сканирование баркодов → Поиск цен
+3. **Редактирование** → Корректировка описания → Установка цены
+4. **Публикация** → Гараж → Создать товар → Активировать
+5. **Просмотр статистики** → Dashboard
+
+## 🐛 Troubleshooting
+
+### Проблема: Не работает AI генерация
+- Проверь `GEMINI_API_KEY` в `.env`
+- Убедись что модель `gemini-3-pro-preview` доступна
+- Проверь логи: `storage/logs/laravel.log`
+
+### Проблема: Не находятся цены на eBay
+- Проверь лимиты API (5000 вызовов/день для Finding, 50000+ для Browse)
+- Убедись что используется `EBAY_ENVIRONMENT=production`
+- Проверь кеш: `php artisan cache:clear`
+
+### Проблема: Не сканируются баркоды
+- Установи `php-gd` и `php-imagick`
+- Проверь качество фото
+- Попробуй разные источники сканирования
+
+### Проблема: Не загружаются фото
+- Проверь права на `storage/app/public`
+- Выполни `php artisan storage:link`
+- Проверь `upload_max_filesize` в `php.ini`
+
+## 📊 Production deployment
+
+### Nginx конфиг
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    root /path/to/AdminkaGarage/public;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.php;
+
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+```
+
+### Оптимизация для production
+```bash
+# Оптимизация автозагрузки
+composer install --optimize-autoloader --no-dev
+
+# Кеширование конфигов
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+
+# Оптимизация изображений
+php artisan storage:optimize
+
+# Supervisor для queue worker
+sudo supervisorctl start laravel-worker:*
+```
+
+### Supervisor конфиг (`/etc/supervisor/conf.d/laravel-worker.conf`)
+```ini
+[program:laravel-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /path/to/AdminkaGarage/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=www-data
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/path/to/AdminkaGarage/storage/logs/worker.log
+stopwaitsecs=3600
+```
+
+### Cron для Scheduler
+```cron
+* * * * * cd /path/to/AdminkaGarage && php artisan schedule:run >> /dev/null 2>&1
+```
+
+## 🔐 Безопасность
+
+- Всегда используй HTTPS на production
+- Никогда не коммить `.env` файл
+- Регулярно обновляй зависимости: `composer update`
+- Используй сильные пароли для админов
+- Настрой rate limiting для API
+- Включи 2FA для админов (Filament поддерживает)
+
+## 📞 Контакты
+
+- GitHub: https://github.com/ipochtoy/AdminkaGarage
+- Issues: https://github.com/ipochtoy/AdminkaGarage/issues
+
+## 📄 Лицензия
+
+MIT License
+
+---
+
+**Версия**: 1.3.1  
+**Последнее обновление**: 24 ноября 2025
+
+Made with ❤️ for garage sales
