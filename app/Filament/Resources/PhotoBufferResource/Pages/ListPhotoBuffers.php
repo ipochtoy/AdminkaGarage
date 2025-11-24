@@ -21,6 +21,8 @@ class ListPhotoBuffers extends Page
     protected static ?string $title = 'Буфер фото';
 
     public array $selected = [];
+    public array $magicSelected = [];
+    public array $fashnSelected = [];
     public ?int $lastBatchId = null;
 
     public function getPhotosProperty()
@@ -46,6 +48,24 @@ class ListPhotoBuffers extends Page
     public function deselectAll(): void
     {
         $this->selected = [];
+    }
+
+    public function toggleMagic(int $id): void
+    {
+        if (in_array($id, $this->magicSelected)) {
+            $this->magicSelected = array_values(array_diff($this->magicSelected, [$id]));
+        } else {
+            $this->magicSelected[] = $id;
+        }
+    }
+
+    public function toggleFashn(int $id): void
+    {
+        if (in_array($id, $this->fashnSelected)) {
+            $this->fashnSelected = array_values(array_diff($this->fashnSelected, [$id]));
+        } else {
+            $this->fashnSelected[] = $id;
+        }
     }
 
     public function deleteSelected(): void
@@ -118,13 +138,22 @@ class ListPhotoBuffers extends Page
 
         $this->lastBatchId = $batch->id;
 
-        // Dispatch auto-processing job
+        // Run job in true background (shell exec)
         $provider = config('services.ai.default_provider', 'gemini');
-        ProcessPhotoBatchJob::dispatch($batch, $provider);
+        $batchId = $batch->id;
+        $artisanPath = base_path('artisan');
+
+        $command = sprintf(
+            'php %s process:photo-batch %d %s > /dev/null 2>&1 &',
+            escapeshellarg($artisanPath),
+            $batchId,
+            escapeshellarg($provider)
+        );
+        exec($command);
 
         Notification::make()
             ->title('Создана карточка ' . $batch->correlation_id)
-            ->body(count($this->selected) . ' фото. Обработка запущена...')
+            ->body(count($this->selected) . ' фото. Описание генерируется в фоне...')
             ->success()
             ->send();
 

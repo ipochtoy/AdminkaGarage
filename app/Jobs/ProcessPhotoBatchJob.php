@@ -40,7 +40,41 @@ class ProcessPhotoBatchJob implements ShouldQueue
         // Update status
         $this->batch->update(['status' => 'processed', 'processed_at' => now()]);
 
+        // 3. Auto-create Product
+        $this->createProduct($photos);
+
         Log::info("Batch {$this->batch->id} processed successfully");
+    }
+
+    protected function createProduct($photos): void
+    {
+        // Refresh batch to get updated data
+        $this->batch->refresh();
+
+        // Create product with AI-generated data
+        $product = \App\Models\Product::create([
+            'photo_batch_id' => $this->batch->id,
+            'title' => $this->batch->title,
+            'description' => $this->batch->description,
+            'price' => $this->batch->price,
+            'brand' => $this->batch->brand,
+            'category' => $this->batch->category,
+            'size' => $this->batch->size,
+            'color' => $this->batch->color,
+            'material' => $this->batch->material ?? null,
+            'condition' => $this->batch->condition ?? 'used',
+            'status' => 'draft', // Draft until manual review
+        ]);
+
+        // Copy photos to product
+        foreach ($photos as $index => $photo) {
+            $product->photos()->create([
+                'image_path' => $photo->image,
+                'order' => $index,
+            ]);
+        }
+
+        Log::info("Product {$product->id} created from batch {$this->batch->id}");
     }
 
     protected function scanBarcodes($photos): void

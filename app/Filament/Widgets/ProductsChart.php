@@ -118,3 +118,4 @@ class ProductsChart extends ChartWidget
     }
 }
 
+
