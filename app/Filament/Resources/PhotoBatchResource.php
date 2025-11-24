@@ -606,6 +606,11 @@ class PhotoBatchResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('publish')
+                    ->label('Опубликовать')
+                    ->icon('heroicon-o-arrow-up-tray')
+                    ->color('success')
+                    ->url(fn(PhotoBatch $record): string => route('filament.admin.pages.publish-to-marketplaces', ['batch' => $record->id])),
                 Tables\Actions\Action::make('view_card')
                     ->label('Просмотр')
                     ->icon('heroicon-o-eye')

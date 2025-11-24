@@ -29,6 +29,23 @@ class ProductListing extends Model
         'currency',
         'published_at',
         'sold_at',
+        // eBay specific
+        'ebay_category_id',
+        'ebay_category_name',
+        'ebay_item_specifics',
+        'ebay_condition_id',
+        'ebay_listing_format',
+        'ebay_quantity',
+        // Shopify specific
+        'shopify_product_type',
+        'shopify_collection_id',
+        'shopify_tags',
+        'shopify_options',
+        // Pochtoy specific
+        'pochtoy_trackings',
+        // Overrides
+        'override_title',
+        'override_description',
     ];
 
     protected $casts = [
@@ -36,6 +53,10 @@ class ProductListing extends Model
         'listed_price' => 'decimal:2',
         'published_at' => 'datetime',
         'sold_at' => 'datetime',
+        'ebay_item_specifics' => 'array',
+        'shopify_tags' => 'array',
+        'shopify_options' => 'array',
+        'pochtoy_trackings' => 'array',
     ];
 
     public function photoBatch(): BelongsTo
