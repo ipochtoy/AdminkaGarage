@@ -5,6 +5,8 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PhotoBatchResource\Pages;
 use App\Filament\Resources\PhotoBatchResource\RelationManagers;
 use App\Models\PhotoBatch;
+use App\Models\ProductListing;
+use App\Services\Marketplaces\ListingOrchestrator;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -279,7 +281,201 @@ class PhotoBatchResource extends Resource
                     ])
                     ->columnSpanFull(),
 
-                // 5. Tech Info (Collapsed)
+                // 7. Marketplace Publishing
+                Forms\Components\Section::make('Публикация на маркетплейсы')
+                    ->schema([
+                        // Current listing status
+                        Forms\Components\Placeholder::make('listings_status')
+                            ->label('')
+                            ->content(function ($record) {
+                                if (!$record) {
+                                    return new HtmlString('<span class="text-gray-500">Сохраните карточку для публикации</span>');
+                                }
+
+                                $orchestrator = new ListingOrchestrator();
+                                $summary = $orchestrator->getBatchListingSummary($record);
+                                $html = '<div class="space-y-2">';
+
+                                // Published
+                                if (!empty($summary['published'])) {
+                                    $html .= '<div class="text-green-500 font-medium">Опубликовано:</div>';
+                                    foreach ($summary['published'] as $platform => $data) {
+                                        $platformName = ProductListing::platforms()[$platform] ?? $platform;
+                                        $url = $data['external_url'] ?? '#';
+                                        $html .= "<div class='ml-4 flex items-center gap-2'>
+                                            <span class='inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'>
+                                                ✓ {$platformName}
+                                            </span>";
+                                        if ($url && $url !== '#') {
+                                            $html .= "<a href='{$url}' target='_blank' class='text-xs text-blue-500 hover:underline'>Открыть →</a>";
+                                        }
+                                        if ($data['price']) {
+                                            $html .= "<span class='text-xs text-gray-500'>\${$data['price']}</span>";
+                                        }
+                                        $html .= "</div>";
+                                    }
+                                }
+
+                                // Failed
+                                if (!empty($summary['failed'])) {
+                                    $html .= '<div class="text-red-500 font-medium mt-2">Ошибки:</div>';
+                                    foreach ($summary['failed'] as $platform => $data) {
+                                        $platformName = ProductListing::platforms()[$platform] ?? $platform;
+                                        $html .= "<div class='ml-4'>
+                                            <span class='inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'>
+                                                ✗ {$platformName}
+                                            </span>
+                                            <span class='text-xs text-red-400 ml-2'>" . e($data['error'] ?? 'Unknown error') . "</span>
+                                        </div>";
+                                    }
+                                }
+
+                                // Not listed (available for publishing)
+                                $availablePlatforms = [];
+                                foreach ($summary['not_listed'] as $platform => $data) {
+                                    if ($data['configured']) {
+                                        $availablePlatforms[$platform] = $data['name'];
+                                    }
+                                }
+
+                                if (!empty($availablePlatforms)) {
+                                    $html .= '<div class="text-gray-500 font-medium mt-2">Доступно для публикации:</div>';
+                                    foreach ($availablePlatforms as $platform => $name) {
+                                        $html .= "<div class='ml-4'>
+                                            <span class='inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'>
+                                                ○ {$name}
+                                            </span>
+                                        </div>";
+                                    }
+                                }
+
+                                // Not configured platforms
+                                $notConfigured = array_filter($summary['not_listed'], fn($d) => !$d['configured']);
+                                if (!empty($notConfigured)) {
+                                    $names = array_map(fn($d) => $d['name'], $notConfigured);
+                                    $html .= '<div class="text-xs text-gray-400 mt-2">Не настроено: ' . implode(', ', $names) . '</div>';
+                                }
+
+                                $html .= '</div>';
+                                return new HtmlString($html);
+                            }),
+
+                        // Publish action
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('publish_to_marketplaces')
+                                ->label('Опубликовать')
+                                ->icon('heroicon-o-arrow-up-tray')
+                                ->color('success')
+                                ->size('lg')
+                                ->modalHeading('Выберите платформы для публикации')
+                                ->modalWidth('md')
+                                ->form(function ($record) {
+                                    $orchestrator = new ListingOrchestrator();
+                                    $platforms = $orchestrator->getAvailablePlatforms();
+                                    $summary = $record ? $orchestrator->getBatchListingSummary($record) : ['published' => [], 'not_listed' => $platforms];
+
+                                    $options = [];
+                                    foreach ($platforms as $platform => $data) {
+                                        if ($data['configured'] && !isset($summary['published'][$platform])) {
+                                            $options[$platform] = $data['name'];
+                                        }
+                                    }
+
+                                    return [
+                                        Forms\Components\CheckboxList::make('platforms')
+                                            ->label('Платформы')
+                                            ->options($options)
+                                            ->default(array_keys($options))
+                                            ->required()
+                                            ->columns(1),
+                                        Forms\Components\TextInput::make('price_override')
+                                            ->label('Цена (опционально)')
+                                            ->numeric()
+                                            ->prefix('$')
+                                            ->placeholder('Использовать цену из карточки'),
+                                    ];
+                                })
+                                ->action(function (array $data, $record, $livewire) {
+                                    if (!$record) {
+                                        \Filament\Notifications\Notification::make()
+                                            ->title('Сначала сохраните карточку')
+                                            ->warning()
+                                            ->send();
+                                        return;
+                                    }
+
+                                    $orchestrator = new ListingOrchestrator();
+                                    $options = [];
+                                    if (!empty($data['price_override'])) {
+                                        $options['price'] = $data['price_override'];
+                                    }
+
+                                    $results = $orchestrator->publishToMultiple($record, $data['platforms'], $options);
+
+                                    $successCount = 0;
+                                    $failedCount = 0;
+                                    $errors = [];
+
+                                    foreach ($results as $platform => $result) {
+                                        if ($result['success']) {
+                                            $successCount++;
+                                        } else {
+                                            $failedCount++;
+                                            $errors[] = ProductListing::platforms()[$platform] . ': ' . ($result['error'] ?? 'Unknown error');
+                                        }
+                                    }
+
+                                    if ($successCount > 0) {
+                                        \Filament\Notifications\Notification::make()
+                                            ->title("Опубликовано на {$successCount} платформ(ы)")
+                                            ->success()
+                                            ->send();
+                                    }
+
+                                    if ($failedCount > 0) {
+                                        \Filament\Notifications\Notification::make()
+                                            ->title("Ошибки: {$failedCount}")
+                                            ->body(implode("\n", $errors))
+                                            ->danger()
+                                            ->send();
+                                    }
+
+                                    $livewire->dispatch('$refresh');
+                                })
+                                ->visible(fn($record) => $record !== null),
+
+                            Forms\Components\Actions\Action::make('unpublish_all')
+                                ->label('Снять с публикации')
+                                ->icon('heroicon-o-arrow-down-tray')
+                                ->color('danger')
+                                ->requiresConfirmation()
+                                ->modalHeading('Снять с публикации?')
+                                ->modalDescription('Товар будет удалён со всех платформ')
+                                ->action(function ($record, $livewire) {
+                                    if (!$record) return;
+
+                                    $orchestrator = new ListingOrchestrator();
+                                    $results = $orchestrator->deleteFromAll($record);
+
+                                    $successCount = count(array_filter($results, fn($r) => $r['success']));
+
+                                    \Filament\Notifications\Notification::make()
+                                        ->title("Удалено с {$successCount} платформ(ы)")
+                                        ->success()
+                                        ->send();
+
+                                    $livewire->dispatch('$refresh');
+                                })
+                                ->visible(function ($record) {
+                                    if (!$record) return false;
+                                    return $record->listings()->where('status', 'published')->exists();
+                                }),
+                        ])->fullWidth(),
+                    ])
+                    ->columnSpanFull()
+                    ->collapsed(false),
+
+                // 8. Tech Info (Collapsed)
                 Forms\Components\Section::make('Техническая информация')
                     ->schema([
                         Forms\Components\Grid::make(3)->schema([
@@ -368,6 +564,35 @@ class PhotoBatchResource extends Resource
                     ->label('Фото')
                     ->counts('photos')
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('listings_status')
+                    ->label('Публикации')
+                    ->getStateUsing(function (PhotoBatch $record): HtmlString {
+                        $listings = $record->listings;
+                        if ($listings->isEmpty()) {
+                            return new HtmlString('<span class="text-gray-400">—</span>');
+                        }
+
+                        $html = '<div class="flex gap-1 flex-wrap">';
+                        foreach ($listings as $listing) {
+                            $color = match ($listing->status) {
+                                'published' => 'bg-green-500',
+                                'pending' => 'bg-yellow-500',
+                                'failed' => 'bg-red-500',
+                                default => 'bg-gray-400',
+                            };
+                            $icon = match ($listing->platform) {
+                                'pochtoy' => 'П',
+                                'ebay' => 'E',
+                                'shopify' => 'S',
+                                default => '?',
+                            };
+                            $title = ProductListing::platforms()[$listing->platform] ?? $listing->platform;
+                            $html .= "<span title='{$title}: {$listing->status}' class='{$color} text-white text-xs px-1.5 py-0.5 rounded font-bold'>{$icon}</span>";
+                        }
+                        $html .= '</div>';
+                        return new HtmlString($html);
+                    }),
             ])
             ->defaultSort('uploaded_at', 'desc')
             ->filters([
@@ -390,6 +615,52 @@ class PhotoBatchResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('bulk_publish')
+                        ->label('Опубликовать на маркетплейсы')
+                        ->icon('heroicon-o-arrow-up-tray')
+                        ->color('success')
+                        ->form(function () {
+                            $orchestrator = new ListingOrchestrator();
+                            $platforms = $orchestrator->getAvailablePlatforms();
+                            $options = [];
+                            foreach ($platforms as $platform => $data) {
+                                if ($data['configured']) {
+                                    $options[$platform] = $data['name'];
+                                }
+                            }
+
+                            return [
+                                Forms\Components\CheckboxList::make('platforms')
+                                    ->label('Платформы')
+                                    ->options($options)
+                                    ->default(array_keys($options))
+                                    ->required()
+                                    ->columns(1),
+                            ];
+                        })
+                        ->action(function (Collection $records, array $data) {
+                            $orchestrator = new ListingOrchestrator();
+                            $totalSuccess = 0;
+                            $totalFailed = 0;
+
+                            foreach ($records as $record) {
+                                $results = $orchestrator->publishToMultiple($record, $data['platforms']);
+                                foreach ($results as $result) {
+                                    if ($result['success']) {
+                                        $totalSuccess++;
+                                    } else {
+                                        $totalFailed++;
+                                    }
+                                }
+                            }
+
+                            \Filament\Notifications\Notification::make()
+                                ->title("Массовая публикация завершена")
+                                ->body("Успешно: {$totalSuccess}, Ошибок: {$totalFailed}")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ]);
     }
