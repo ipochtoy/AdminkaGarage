@@ -8,6 +8,7 @@
     "require": {
         "php": "^8.2",
         "filament/filament": "^3.2",
+        "inertiajs/inertia-laravel": "^2.0",
         "intervention/image": "^3.11",
         "irazasyed/telegram-bot-sdk": "^3.15",
         "laravel/framework": "^12.0",

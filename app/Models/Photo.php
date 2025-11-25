@@ -27,6 +27,13 @@ class Photo extends Model
         'uploaded_at' => 'datetime',
     ];
 
+    protected $appends = ['url'];
+
+    public function getUrlAttribute(): string
+    {
+        return asset('storage/' . $this->image);
+    }
+
     public function batch(): BelongsTo
     {
         return $this->belongsTo(PhotoBatch::class, 'photo_batch_id');

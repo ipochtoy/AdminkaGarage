@@ -9,6 +9,7 @@ use App\Services\EbayService;
 use App\Services\PochtoyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
 
 class ProductCardController extends Controller
 {
@@ -16,7 +17,7 @@ class ProductCardController extends Controller
     {
         $photoBatch->load('photos.barcodes');
 
-        return view('product-card', [
+        return Inertia::render('ProductCard', [
             'card' => $photoBatch,
             'photos' => $photoBatch->photos()->orderBy('order')->get(),
             'barcodes' => $photoBatch->getAllBarcodes(),
