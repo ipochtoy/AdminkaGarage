@@ -207,6 +207,8 @@ class EditPhotoBatch extends EditRecord
                             ->danger()
                             ->send();
                     }
+                    
+                    $this->dispatch('$refresh');
                 })
                 ->modalHeading('Редактировать GG лейбу')
                 ->modalDescription('После сохранения карточка автоматически отправится в Pochtoy')
@@ -240,6 +242,8 @@ class EditPhotoBatch extends EditRecord
                             ->danger()
                             ->send();
                     }
+                    
+                    $this->dispatch('$refresh');
                 }),
         ];
     }
