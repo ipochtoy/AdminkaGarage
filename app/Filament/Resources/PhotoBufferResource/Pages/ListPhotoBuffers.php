@@ -23,6 +23,7 @@ class ListPhotoBuffers extends Page
     public array $selected = [];
     public array $magicSelected = [];
     public array $fashnSelected = [];
+    public array $ebaySelected = [];
     public ?int $lastBatchId = null;
 
     public function getPhotosProperty()
@@ -65,6 +66,15 @@ class ListPhotoBuffers extends Page
             $this->fashnSelected = array_values(array_diff($this->fashnSelected, [$id]));
         } else {
             $this->fashnSelected[] = $id;
+        }
+    }
+
+    public function toggleEbay(int $id): void
+    {
+        if (in_array($id, $this->ebaySelected)) {
+            $this->ebaySelected = array_values(array_diff($this->ebaySelected, [$id]));
+        } else {
+            $this->ebaySelected[] = $id;
         }
     }
 
@@ -119,18 +129,22 @@ class ListPhotoBuffers extends Page
             'uploaded_at' => now(),
         ]);
 
-        // Move photos to batch
+        // Move photos to batch and track mapping
         $order = 0;
+        $bufferToPhotoMap = [];
         foreach ($bufferPhotos as $bufferPhoto) {
-            Photo::create([
+            $photo = Photo::create([
                 'photo_batch_id' => $batch->id,
                 'file_id' => $bufferPhoto->file_id,
                 'message_id' => $bufferPhoto->message_id,
                 'image' => $bufferPhoto->image,
                 'is_main' => $order === 0,
+                'ebay_selected' => in_array($bufferPhoto->id, $this->ebaySelected),
                 'order' => $order++,
                 'uploaded_at' => $bufferPhoto->uploaded_at,
             ]);
+
+            $bufferToPhotoMap[$bufferPhoto->id] = $photo->id;
 
             // Delete from buffer
             $bufferPhoto->delete();
@@ -151,13 +165,68 @@ class ListPhotoBuffers extends Page
         );
         exec($command);
 
+        // Process Magic/FASHN/eBay selections
+        $magicCount = 0;
+        $fashnCount = 0;
+        $ebayCount = count($this->ebaySelected);
+
+        foreach ($this->magicSelected as $bufferPhotoId) {
+            if (isset($bufferToPhotoMap[$bufferPhotoId])) {
+                $photoId = $bufferToPhotoMap[$bufferPhotoId];
+                $magicCommand = sprintf(
+                    'php %s process:photo-magic %d %d > /dev/null 2>&1 &',
+                    escapeshellarg($artisanPath),
+                    $batchId,
+                    $photoId
+                );
+                exec($magicCommand);
+                $magicCount++;
+            }
+        }
+
+        foreach ($this->fashnSelected as $bufferPhotoId) {
+            if (isset($bufferToPhotoMap[$bufferPhotoId])) {
+                $photoId = $bufferToPhotoMap[$bufferPhotoId];
+                $fashnCommand = sprintf(
+                    'php %s process:photo-fashn %d %d > /dev/null 2>&1 &',
+                    escapeshellarg($artisanPath),
+                    $batchId,
+                    $photoId
+                );
+                exec($fashnCommand);
+                $fashnCount++;
+            }
+        }
+
+        // If any photos marked for eBay, generate eBay listing
+        if ($ebayCount > 0) {
+            $ebayCommand = sprintf(
+                'php %s process:ebay-listing %d > /dev/null 2>&1 &',
+                escapeshellarg($artisanPath),
+                $batchId
+            );
+            exec($ebayCommand);
+        }
+
+        $message = count($this->selected) . ' фото. Описание генерируется в фоне...';
+        if ($magicCount > 0 || $fashnCount > 0 || $ebayCount > 0) {
+            $parts = [];
+            if ($magicCount > 0) $parts[] = "Magic: $magicCount";
+            if ($fashnCount > 0) $parts[] = "FASHN: $fashnCount";
+            if ($ebayCount > 0) $parts[] = "eBay: $ebayCount";
+            $message .= ' ' . implode(', ', $parts) . ' запущены.';
+        }
+
         Notification::make()
             ->title('Создана карточка ' . $batch->correlation_id)
-            ->body(count($this->selected) . ' фото. Описание генерируется в фоне...')
+            ->body($message)
             ->success()
             ->send();
 
         $this->selected = [];
+        $this->magicSelected = [];
+        $this->fashnSelected = [];
+        $this->ebaySelected = [];
     }
 
     public function undoLastBatch(): void

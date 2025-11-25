@@ -40,6 +40,7 @@ class StatsOverview extends BaseWidget
         $fashionProcessed = Photo::whereHas('processingTasks', function($q) {
             $q->where('api_name', 'fashn')->where('status', 'completed');
         })->count();
+        $ebaySelected = Photo::where('ebay_selected', true)->count();
 
         // Статистика по выручке
         $totalRevenue = Product::where('status', 'active')->sum('price') ?? 0;
@@ -78,6 +79,11 @@ class StatsOverview extends BaseWidget
                 ->description(round($totalPhotos > 0 ? ($fashionProcessed / $totalPhotos * 100) : 0, 1) . '% от всех фото')
                 ->descriptionIcon('heroicon-m-sparkles')
                 ->color('warning'),
+
+            Stat::make('Помечено для eBay', $ebaySelected)
+                ->description(round($totalPhotos > 0 ? ($ebaySelected / $totalPhotos * 100) : 0, 1) . '% от всех фото')
+                ->descriptionIcon('heroicon-m-shopping-cart')
+                ->color('info'),
 
             Stat::make('Стоимость товаров', '$' . number_format($totalRevenue, 2))
                 ->description($newRevenue > 0 ? '+$' . number_format($newRevenue, 2) . ' новых' : 'Нет новых')

@@ -51,6 +51,17 @@
             font-size: 9px;
             font-weight: bold;
         }
+        .ebay-badge {
+            position: absolute;
+            top: 52px;
+            left: 4px;
+            background: #0064d2;
+            color: white;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: bold;
+        }
         .processing-buttons {
             position: absolute;
             bottom: 4px;
@@ -96,15 +107,31 @@
             background: #6d28d9;
             box-shadow: 0 0 0 2px white inset;
         }
+        .btn-ebay {
+            flex: 1;
+            background: #0064d2;
+            color: white;
+            border: none;
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+        }
+        .btn-ebay.active {
+            background: #0052a3;
+            box-shadow: 0 0 0 2px white inset;
+        }
     </style>
 
     <div class="mb-4 flex gap-2">
         @if(count($selected) > 0)
             <x-filament::button wire:click="createBatch" color="success" size="sm">
                 Создать карточку ({{ count($selected) }})
-                @if(count($magicSelected) > 0 || count($fashnSelected) > 0)
+                @if(count($magicSelected) > 0 || count($fashnSelected) > 0 || count($ebaySelected) > 0)
                     <span style="font-size: 10px; opacity: 0.8;">
-                        (🪄{{ count($magicSelected) }} ✨{{ count($fashnSelected) }})
+                        (🪄{{ count($magicSelected) }} ✨{{ count($fashnSelected) }} 🛒{{ count($ebaySelected) }})
                     </span>
                 @endif
             </x-filament::button>
@@ -171,6 +198,11 @@
                     <div class="magic-badge">🪄 Magic</div>
                 @endif
 
+                {{-- eBay Badge --}}
+                @if(in_array($photo->id, $ebaySelected))
+                    <div class="ebay-badge">🛒 eBay</div>
+                @endif
+
                 {{-- Processed Badge --}}
                 @if($photo->processed)
                     <div style="position: absolute; bottom: 28px; left: 4px; background: #22c55e; color: white; border-radius: 4px; padding: 2px 4px; font-size: 10px;">
@@ -201,6 +233,13 @@
                             wire:click.stop="toggleFashn({{ $photo->id }})"
                         >
                             ✨ FASHN
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-ebay {{ in_array($photo->id, $ebaySelected) ? 'active' : '' }}"
+                            wire:click.stop="toggleEbay({{ $photo->id }})"
+                        >
+                            🛒 eBay
                         </button>
                     </div>
                 @endif

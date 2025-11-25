@@ -69,34 +69,34 @@ class ProductResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('photos.image_path')
-                    ->label('Фото')
+                    ->label('')
                     ->disk('public')
                     ->limit(1)
-                    ->circular(),
+                    ->size(48),
                 Tables\Columns\TextColumn::make('title')
-                    ->label('Название')
+                    ->label('Товар')
                     ->searchable()
-                    ->limit(50),
+                    ->limit(45)
+                    ->description(fn(Product $record): ?string => $record->brand),
                 Tables\Columns\TextColumn::make('price')
                     ->label('Цена')
                     ->money()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('brand')
-                    ->label('Бренд')
-                    ->searchable(),
                 Tables\Columns\TextColumn::make('status')
                     ->label('Статус')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
                         'draft' => 'gray',
                         'published' => 'success',
+                        default => 'gray',
                     })
                     ->formatStateUsing(fn(string $state): string => match ($state) {
                         'draft' => 'Черновик',
                         'published' => 'Активно',
+                        default => $state,
                     }),
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('В продаже с')
+                    ->label('Дата')
                     ->date('d.m.Y')
                     ->sortable(),
             ])
@@ -104,8 +104,7 @@ class ProductResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ViewAction::make()->iconButton(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

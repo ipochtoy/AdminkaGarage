@@ -14,6 +14,8 @@ class PhotoBatch extends Model
         'uploaded_at',
         'processed_at',
         'status',
+        'pochtoy_status',
+        'pochtoy_error',
         'title',
         'description',
         'price',
@@ -26,12 +28,24 @@ class PhotoBatch extends Model
         'quantity',
         'ai_summary',
         'locations',
+        // eBay & Shopify fields
+        'ebay_title',
+        'ebay_description',
+        'ebay_condition',
+        'ebay_brand',
+        'ebay_size',
+        'ebay_color',
+        'ebay_price',
+        'ebay_category',
+        'ebay_tags',
     ];
 
     protected $casts = [
         'message_ids' => 'array',
         'locations' => 'array',
+        'ebay_tags' => 'array',
         'price' => 'decimal:2',
+        'ebay_price' => 'decimal:2',
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
     ];

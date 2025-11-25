@@ -40,10 +40,48 @@ class ProcessPhotoBatchJob implements ShouldQueue
         // Update status
         $this->batch->update(['status' => 'processed', 'processed_at' => now()]);
 
-        // 3. Auto-create Product
+        // 3. Send to Pochtoy
+        $this->sendToPochtoy();
+
+        // 4. Auto-create Product
         $this->createProduct($photos);
 
         Log::info("Batch {$this->batch->id} processed successfully");
+    }
+
+    protected function sendToPochtoy(): void
+    {
+        $this->batch->refresh();
+        
+        // Check if we have GG labels - required for Pochtoy
+        $ggLabels = $this->batch->getGgLabels();
+        
+        if (empty($ggLabels)) {
+            $this->batch->update([
+                'pochtoy_status' => 'failed',
+                'pochtoy_error' => 'Не найдена лейба GG',
+            ]);
+            Log::warning("Batch {$this->batch->id}: No GG label found, skipping Pochtoy");
+            return;
+        }
+
+        $service = new \App\Services\PochtoyService();
+        $result = $service->sendCard($this->batch);
+
+        if ($result['success']) {
+            $this->batch->update([
+                'pochtoy_status' => 'success',
+                'pochtoy_error' => null,
+            ]);
+            Log::info("Batch {$this->batch->id}: Sent to Pochtoy successfully");
+        } else {
+            $error = $result['error'] ?? 'Unknown error';
+            $this->batch->update([
+                'pochtoy_status' => 'failed',
+                'pochtoy_error' => $error,
+            ]);
+            Log::error("Batch {$this->batch->id}: Pochtoy failed - {$error}");
+        }
     }
 
     protected function createProduct($photos): void

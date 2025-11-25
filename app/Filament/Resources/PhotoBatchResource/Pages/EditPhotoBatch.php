@@ -14,6 +14,51 @@ class EditPhotoBatch extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            // AI Generation Actions (used by barcode-list view)
+            Actions\Action::make('generate_openai')
+                ->label('OpenAI GPT-5.1')
+                ->action(function () {
+                    $record = $this->getRecord();
+                    if (!$record) return;
+
+                    \App\Filament\Resources\PhotoBatchResource::generateAIDescription(
+                        function($key, $value) { $this->data[$key] = $value; },
+                        $this,
+                        'openai'
+                    );
+                })
+                ->visible(false), // Hidden from header, only for mountAction
+
+            Actions\Action::make('generate_gemini_pro')
+                ->label('Gemini 3 Pro')
+                ->action(function () {
+                    $record = $this->getRecord();
+                    if (!$record) return;
+
+                    \App\Filament\Resources\PhotoBatchResource::generateAIDescription(
+                        function($key, $value) { $this->data[$key] = $value; },
+                        $this,
+                        'gemini',
+                        'gemini-3-pro-preview'
+                    );
+                })
+                ->visible(false),
+
+            Actions\Action::make('generate_gemini_flash')
+                ->label('Gemini 2.5 Flash')
+                ->action(function () {
+                    $record = $this->getRecord();
+                    if (!$record) return;
+
+                    \App\Filament\Resources\PhotoBatchResource::generateAIDescription(
+                        function($key, $value) { $this->data[$key] = $value; },
+                        $this,
+                        'gemini',
+                        'gemini-2.5-flash-preview-09-2025'
+                    );
+                })
+                ->visible(false),
+
             Actions\Action::make('generate_model')
                 ->label('Generate Model (FASHN)')
                 ->icon('heroicon-o-sparkles')
@@ -89,6 +134,113 @@ class EditPhotoBatch extends EditRecord
                 }),
 
             Actions\DeleteAction::make(),
+
+            // Edit GG Label
+            Actions\Action::make('edit_gg_label')
+                ->label('Редактировать лейбу')
+                ->icon('heroicon-o-pencil-square')
+                ->color('warning')
+                ->form([
+                    Forms\Components\TextInput::make('gg_label')
+                        ->label('GG Лейба')
+                        ->placeholder('GG123 или Q456')
+                        ->default(fn () => $this->getRecord()->getGgLabels()[0] ?? '')
+                        ->required()
+                        ->maxLength(50),
+                ])
+                ->action(function (array $data) {
+                    $record = $this->getRecord();
+                    $newLabel = trim($data['gg_label']);
+                    
+                    if (empty($newLabel)) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Введите лейбу')
+                            ->warning()
+                            ->send();
+                        return;
+                    }
+                    
+                    // Get first photo of batch to attach barcode
+                    $firstPhoto = $record->photos()->first();
+                    if (!$firstPhoto) {
+                        \Filament\Notifications\Notification::make()
+                            ->title('Нет фото в карточке')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
+                    
+                    // Remove old GG labels
+                    \App\Models\BarcodeResult::where('source', 'gg-label')
+                        ->whereHas('photo', fn($q) => $q->where('photo_batch_id', $record->id))
+                        ->delete();
+                    
+                    // Create new GG label
+                    \App\Models\BarcodeResult::create([
+                        'photo_id' => $firstPhoto->id,
+                        'symbology' => 'CODE39',
+                        'data' => $newLabel,
+                        'source' => 'gg-label',
+                    ]);
+                    
+                    \Filament\Notifications\Notification::make()
+                        ->title('Лейба сохранена')
+                        ->body('Отправляем в Pochtoy...')
+                        ->success()
+                        ->send();
+                    
+                    // Send to Pochtoy
+                    $pochtoyService = new \App\Services\PochtoyService();
+                    $result = $pochtoyService->sendCard($record);
+                    
+                    if ($result['success']) {
+                        $record->update(['pochtoy_status' => 'success', 'pochtoy_error' => null]);
+                        \Filament\Notifications\Notification::make()
+                            ->title('✅ Отправлено в Pochtoy!')
+                            ->success()
+                            ->send();
+                    } else {
+                        $record->update(['pochtoy_status' => 'failed', 'pochtoy_error' => $result['error'] ?? 'Unknown error']);
+                        \Filament\Notifications\Notification::make()
+                            ->title('Ошибка Pochtoy')
+                            ->body($result['error'] ?? 'Unknown error')
+                            ->danger()
+                            ->send();
+                    }
+                })
+                ->modalHeading('Редактировать GG лейбу')
+                ->modalDescription('После сохранения карточка автоматически отправится в Pochtoy')
+                ->modalSubmitActionLabel('Сохранить и отправить'),
+
+            // Retry Pochtoy
+            Actions\Action::make('retry_pochtoy')
+                ->label('Повторить отправку в Pochtoy')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->visible(fn () => $this->getRecord()?->pochtoy_status === 'failed')
+                ->requiresConfirmation()
+                ->modalHeading('Повторить отправку?')
+                ->modalDescription('Карточка будет отправлена в Pochtoy повторно.')
+                ->action(function () {
+                    $record = $this->getRecord();
+                    $pochtoyService = new \App\Services\PochtoyService();
+                    $result = $pochtoyService->sendCard($record);
+                    
+                    if ($result['success']) {
+                        $record->update(['pochtoy_status' => 'success', 'pochtoy_error' => null]);
+                        \Filament\Notifications\Notification::make()
+                            ->title('Успешно отправлено в Pochtoy!')
+                            ->success()
+                            ->send();
+                    } else {
+                        $record->update(['pochtoy_status' => 'failed', 'pochtoy_error' => $result['error'] ?? 'Unknown error']);
+                        \Filament\Notifications\Notification::make()
+                            ->title('Ошибка отправки')
+                            ->body($result['error'] ?? 'Unknown error')
+                            ->danger()
+                            ->send();
+                    }
+                }),
         ];
     }
 
@@ -104,6 +256,9 @@ class EditPhotoBatch extends EditRecord
                 ->modalDescription('Будет создана карточка товара с выбранными фото (отмеченными "На продажу").')
                 ->action(function (PhotoBatchResource\Pages\EditPhotoBatch $livewire) {
                     $record = $livewire->getRecord();
+
+                    // Update status to published
+                    $record->update(['status' => 'published']);
 
                     // 1. Create Product
                     $product = \App\Models\Product::create([
@@ -147,6 +302,9 @@ class EditPhotoBatch extends EditRecord
                                 ->url(\App\Filament\Resources\ProductResource::getUrl('edit', ['record' => $product])),
                         ])
                         ->send();
+
+                    // Redirect to list page
+                    return redirect()->to(\App\Filament\Resources\PhotoBatchResource::getUrl('index'));
                 }),
         ]);
     }
