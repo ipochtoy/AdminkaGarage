@@ -16,12 +16,14 @@ class Photo extends Model
         'uploaded_at',
         'is_main',
         'is_public',
+        'ebay_selected',
         'order',
     ];
 
     protected $casts = [
         'is_main' => 'boolean',
         'is_public' => 'boolean',
+        'ebay_selected' => 'boolean',
         'uploaded_at' => 'datetime',
     ];
 

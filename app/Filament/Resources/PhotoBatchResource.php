@@ -41,8 +41,53 @@ class PhotoBatchResource extends Resource
     {
         return $form
             ->schema([
-                // 1. Photos Section (Full Width)
-                Forms\Components\Section::make('Фото')
+                // Pochtoy Status Alert
+                Forms\Components\Placeholder::make('pochtoy_alert')
+                    ->hiddenLabel()
+                    ->content(function ($record) {
+                        if (!$record) return null;
+                        
+                        if ($record->pochtoy_status === 'success') {
+                            return new HtmlString('
+                                <div style="background: #dcfce7; border: 1px solid #16a34a; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-size: 20px;">✅</span>
+                                    <span style="color: #166534; font-weight: 500;">Отправлено в Pochtoy</span>
+                                </div>
+                            ');
+                        }
+                        
+                        if ($record->pochtoy_status === 'failed') {
+                            $error = e($record->pochtoy_error ?? 'Неизвестная ошибка');
+                            return new HtmlString('
+                                <div style="background: #fef2f2; border: 1px solid #dc2626; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-size: 20px;">❌</span>
+                                    <div>
+                                        <div style="color: #991b1b; font-weight: 600;">Ошибка отправки в Pochtoy</div>
+                                        <div style="color: #b91c1c; font-size: 13px;">' . $error . '</div>
+                                    </div>
+                                </div>
+                            ');
+                        }
+                        
+                        if ($record->pochtoy_status === 'pending' && $record->status !== 'pending') {
+                            return new HtmlString('
+                                <div style="background: #fef9c3; border: 1px solid #ca8a04; border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
+                                    <span style="font-size: 20px;">⏳</span>
+                                    <span style="color: #854d0e; font-weight: 500;">Ожидает отправки в Pochtoy</span>
+                                </div>
+                            ');
+                        }
+                        
+                        return null;
+                    })
+                    ->columnSpanFull(),
+
+                Forms\Components\Tabs::make('main_tabs')
+                    ->tabs([
+                        Forms\Components\Tabs\Tab::make('Гараж')
+                            ->schema([
+                                // 1. Photos Section (Full Width)
+                                Forms\Components\Section::make('Фото')
                     ->schema([
                         Forms\Components\View::make('filament.forms.components.photo-gallery'),
                     ])
@@ -56,54 +101,61 @@ class PhotoBatchResource extends Resource
                     ])
                     ->columnSpanFull(),
 
-                // 3. AI Assistant Section
+                // 3. AI Assistant Section (Compact)
                 Forms\Components\Section::make('AI Ассистент')
                     ->schema([
-                        Forms\Components\Actions::make([
-                            Forms\Components\Actions\Action::make('generate_openai')
-                                ->label('OpenAI GPT-5.1')
-                                ->icon('heroicon-m-bolt')
-                                ->color('success')
-                                ->action(function ($set, $livewire) {
-                                    static::generateAIDescription($set, $livewire, 'openai');
-                                }),
-                            Forms\Components\Actions\Action::make('generate_gemini_pro')
-                                ->label('Gemini 3 Pro')
-                                ->icon('heroicon-m-sparkles')
-                                ->color('info')
-                                ->action(function ($set, $livewire) {
-                                    static::generateAIDescription($set, $livewire, 'gemini', 'gemini-3-pro-preview');
-                                }),
-                            Forms\Components\Actions\Action::make('generate_gemini_flash')
-                                ->label('Gemini 2.5 Flash')
-                                ->icon('heroicon-m-bolt')
-                                ->color('warning')
-                                ->action(function ($set, $livewire) {
-                                    static::generateAIDescription($set, $livewire, 'gemini', 'gemini-2.5-flash-preview-09-2025');
-                                }),
-                        ])->fullWidth(),
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\Actions::make([
+                                    Forms\Components\Actions\Action::make('generate_openai')
+                                        ->label('OpenAI GPT-5.1')
+                                        ->icon('heroicon-m-bolt')
+                                        ->color('success')
+                                        ->size('sm')
+                                        ->action(function ($set, $livewire) {
+                                            static::generateAIDescription($set, $livewire, 'openai');
+                                        }),
+                                    Forms\Components\Actions\Action::make('generate_gemini_pro')
+                                        ->label('Gemini 3 Pro')
+                                        ->icon('heroicon-m-sparkles')
+                                        ->color('info')
+                                        ->size('sm')
+                                        ->action(function ($set, $livewire) {
+                                            static::generateAIDescription($set, $livewire, 'gemini', 'gemini-3-pro-preview');
+                                        }),
+                                    Forms\Components\Actions\Action::make('generate_gemini_flash')
+                                        ->label('Gemini 2.5 Flash')
+                                        ->icon('heroicon-m-bolt')
+                                        ->color('warning')
+                                        ->size('sm')
+                                        ->action(function ($set, $livewire) {
+                                            static::generateAIDescription($set, $livewire, 'gemini', 'gemini-2.5-flash-preview-09-2025');
+                                        }),
+                                ]),
 
-                        Forms\Components\Placeholder::make('ai_summary_display')
-                            ->label('Результат AI')
-                            ->content(fn($record) => $record && $record->ai_summary ? new HtmlString('
-                                <div x-data="{ expanded: false }">
-                                    <div x-show="!expanded" class="text-xs bg-gray-900 p-3 rounded border border-gray-700 text-gray-300">
-                                        <span class="text-green-400">✓ Описание сгенерировано</span>
-                                        <button type="button" @click="expanded = true" class="ml-2 text-blue-400 hover:underline">Показать JSON</button>
-                                    </div>
-                                    <div x-show="expanded" x-cloak>
-                                        <pre class="whitespace-pre-wrap text-xs bg-gray-900 p-3 rounded border border-gray-700 text-gray-300 overflow-x-auto max-h-48 overflow-y-auto">' . e($record->ai_summary) . '</pre>
-                                        <button type="button" @click="expanded = false" class="mt-1 text-xs text-blue-400 hover:underline">Свернуть</button>
-                                    </div>
-                                </div>
-                            ') : null)
-                            ->hidden(fn($record) => !$record || empty($record->ai_summary)),
+                                Forms\Components\Placeholder::make('ai_summary_display')
+                                    ->label('')
+                                    ->content(fn($record) => $record && $record->ai_summary ? new HtmlString('
+                                        <div x-data="{ expanded: false }" class="text-xs">
+                                            <div x-show="!expanded" class="bg-gray-900 p-2 rounded border border-gray-700 text-gray-300">
+                                                <span class="text-green-400">✓ Описание сгенерировано</span>
+                                                <button type="button" @click="expanded = true" class="ml-2 text-blue-400 hover:underline">JSON</button>
+                                            </div>
+                                            <div x-show="expanded" x-cloak>
+                                                <pre class="whitespace-pre-wrap text-xs bg-gray-900 p-2 rounded border border-gray-700 text-gray-300 overflow-x-auto max-h-32 overflow-y-auto">' . e($record->ai_summary) . '</pre>
+                                                <button type="button" @click="expanded = false" class="mt-1 text-xs text-blue-400 hover:underline">Свернуть</button>
+                                            </div>
+                                        </div>
+                                    ') : new HtmlString('<div class="text-xs text-gray-500 italic">Сгенерируйте описание</div>'))
+                                    ->columnSpan(1),
+                            ]),
 
                         Forms\Components\View::make('filament.forms.components.voice-correction'),
 
                         Forms\Components\Hidden::make('ai_summary'),
                     ])
-                    ->columnSpanFull(),
+                    ->columnSpanFull()
+                    ->compact(),
 
                 // 4. Price Suggestions
                 Forms\Components\Section::make('Рекомендации по цене')
@@ -111,7 +163,8 @@ class PhotoBatchResource extends Resource
                         Forms\Components\View::make('filament.forms.components.price-suggestions'),
                     ])
                     ->columnSpanFull()
-                    ->collapsible(),
+                    ->collapsible()
+                    ->compact(),
 
                 // 5. Product Description Form
                 Forms\Components\Section::make('Редактирование')
@@ -124,7 +177,8 @@ class PhotoBatchResource extends Resource
 
                         Forms\Components\Textarea::make('description')
                             ->label('Описание')
-                            ->rows(5)
+                            ->rows(8)
+                            ->autosize()
                             ->columnSpanFull(),
 
                         Forms\Components\Grid::make([
@@ -279,23 +333,154 @@ class PhotoBatchResource extends Resource
                     ])
                     ->columnSpanFull(),
 
-                // 5. Tech Info (Collapsed)
-                Forms\Components\Section::make('Техническая информация')
-                    ->schema([
-                        Forms\Components\Grid::make(3)->schema([
-                            Forms\Components\TextInput::make('correlation_id')->label('ID')->disabled(),
-                            Forms\Components\Select::make('status')
-                                ->label('Статус')
-                                ->options(['pending' => 'Ожидает', 'processed' => 'Обработано', 'failed' => 'Ошибка'])
-                                ->required(),
-                            Forms\Components\TextInput::make('chat_id')->label('Chat ID')->disabled(),
-                        ]),
-                        Forms\Components\Grid::make(2)->schema([
-                            Forms\Components\DateTimePicker::make('uploaded_at')->label('Загружено')->disabled(),
-                            Forms\Components\DateTimePicker::make('processed_at')->label('Обработано')->disabled(),
-                        ]),
+                                // 5. Tech Info (Collapsed)
+                                Forms\Components\Section::make('Техническая информация')
+                                    ->schema([
+                                        Forms\Components\Grid::make(3)->schema([
+                                            Forms\Components\TextInput::make('correlation_id')->label('ID')->disabled(),
+                                            Forms\Components\Select::make('status')
+                                                ->label('Статус')
+                                                ->options(['pending' => 'Ожидает', 'processed' => 'Обработано', 'failed' => 'Ошибка'])
+                                                ->required(),
+                                            Forms\Components\TextInput::make('chat_id')->label('Chat ID')->disabled(),
+                                        ]),
+                                        Forms\Components\Grid::make(2)->schema([
+                                            Forms\Components\DateTimePicker::make('uploaded_at')->label('Загружено')->disabled(),
+                                            Forms\Components\DateTimePicker::make('processed_at')->label('Обработано')->disabled(),
+                                        ]),
+                                    ])
+                                    ->collapsed()
+                                    ->columnSpanFull(),
+                            ]), // End of "Гараж" tab
+
+                        Forms\Components\Tabs\Tab::make('eBay & Shopify')
+                            ->schema([
+                                // Photos Section (same as in Garage tab)
+                                Forms\Components\Section::make('Photos')
+                                    ->schema([
+                                        Forms\Components\View::make('filament.forms.components.photo-gallery'),
+                                    ])
+                                    ->columnSpanFull()
+                                    ->collapsible(),
+
+                                Forms\Components\Section::make('AI Assistant')
+                                    ->description('Generate SEO-optimized listing with Gemini AI')
+                                    ->schema([
+                                        Forms\Components\Actions::make([
+                                            Forms\Components\Actions\Action::make('generate_ebay_all')
+                                                ->label('Generate eBay Listing (Gemini)')
+                                                ->icon('heroicon-m-sparkles')
+                                                ->color('success')
+                                                ->action(function ($set, $livewire) {
+                                                    static::generateEbayListing($set, $livewire);
+                                                }),
+                                        ]),
+                                    ])
+                                    ->columnSpanFull()
+                                    ->compact()
+                                    ->collapsible(),
+
+                                Forms\Components\Section::make('Product Listing')
+                                    ->description('Edit the SEO-optimized listing for eBay and Shopify')
+                                    ->schema([
+                                        Forms\Components\TextInput::make('ebay_title')
+                                            ->label('Title (English)')
+                                            ->placeholder('e.g., Vintage Nike Air Max 90 Running Shoes Size 10')
+                                            ->maxLength(80)
+                                            ->helperText('Max 80 characters for eBay')
+                                            ->columnSpanFull(),
+
+                                        Forms\Components\Textarea::make('ebay_description')
+                                            ->label('Description (English)')
+                                            ->rows(10)
+                                            ->placeholder('Detailed SEO-optimized product description...')
+                                            ->helperText('SEO-optimized description')
+                                            ->columnSpanFull(),
+
+                                        Forms\Components\Grid::make(3)
+                                            ->schema([
+                                                Forms\Components\Select::make('ebay_condition')
+                                                    ->label('Condition')
+                                                    ->options([
+                                                        'New with tags' => 'New with tags',
+                                                        'New without tags' => 'New without tags',
+                                                        'Pre-owned - Excellent' => 'Pre-owned - Excellent',
+                                                        'Pre-owned - Good' => 'Pre-owned - Good',
+                                                        'Pre-owned - Fair' => 'Pre-owned - Fair',
+                                                    ])
+                                                    ->default('Pre-owned - Good')
+                                                    ->required(),
+
+                                                Forms\Components\TextInput::make('ebay_brand')
+                                                    ->label('Brand')
+                                                    ->placeholder('e.g., Nike'),
+
+                                                Forms\Components\Select::make('ebay_category')
+                                                    ->label('eBay Category')
+                                                    ->searchable()
+                                                    ->options([
+                                                        '11450' => 'Clothing, Shoes & Accessories',
+                                                        '1059' => 'Men\'s Clothing',
+                                                        '15724' => 'Women\'s Clothing',
+                                                        '93427' => 'Men\'s Shoes',
+                                                        '3034' => 'Women\'s Shoes',
+                                                    ])
+                                                    ->default('11450'),
+                                            ]),
+
+                                        Forms\Components\Grid::make(3)
+                                            ->schema([
+                                                Forms\Components\TextInput::make('ebay_size')
+                                                    ->label('Size')
+                                                    ->placeholder('e.g., L, 42, 10 US'),
+
+                                                Forms\Components\TextInput::make('ebay_color')
+                                                    ->label('Color')
+                                                    ->placeholder('e.g., Black, Blue'),
+
+                                                Forms\Components\TextInput::make('ebay_price')
+                                                    ->label('Price (USD)')
+                                                    ->numeric()
+                                                    ->prefix('$')
+                                                    ->default(0),
+                                            ]),
+
+                                        Forms\Components\TagsInput::make('ebay_tags')
+                                            ->label('SEO Tags / Keywords')
+                                            ->placeholder('vintage, retro, nike, running, sport')
+                                            ->helperText('Keywords for better visibility on eBay and Shopify')
+                                            ->columnSpanFull(),
+                                    ])
+                                    ->columnSpanFull(),
+
+                                Forms\Components\Section::make('Similar Products')
+                                    ->description('Find similar products by barcode or title to copy listings')
+                                    ->schema([
+                                        Forms\Components\View::make('filament.forms.components.similar-products'),
+                                    ])
+                                    ->columnSpanFull()
+                                    ->collapsible()
+                                    ->collapsed(),
+
+                                Forms\Components\Section::make('Publish')
+                                    ->schema([
+                                        Forms\Components\Actions::make([
+                                            Forms\Components\Actions\Action::make('publish_both')
+                                                ->label('Publish to eBay & Shopify')
+                                                ->icon('heroicon-o-rocket-launch')
+                                                ->color('success')
+                                                ->size('lg')
+                                                ->requiresConfirmation()
+                                                ->modalHeading('Publish Listing?')
+                                                ->modalDescription('This will create listings on both eBay and Shopify.')
+                                                ->action(function ($livewire) {
+                                                    static::publishToMarketplaces($livewire);
+                                                })
+                                        ])->fullWidth(),
+                                    ])
+                                    ->columnSpanFull(),
+                            ]),
                     ])
-                    ->collapsed()
                     ->columnSpanFull(),
             ]);
     }
@@ -303,22 +488,28 @@ class PhotoBatchResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->poll('30s') // Auto-refresh every 30 seconds
             ->columns([
-                Tables\Columns\TextColumn::make('correlation_id')
-                    ->label('ID карточки')
-                    ->searchable()
-                    ->sortable()
-                    ->weight('bold')
-                    ->url(fn(PhotoBatch $record): string => route('filament.admin.resources.photo-batches.edit', $record)),
+                Tables\Columns\TextColumn::make('photos_preview')
+                    ->label('')
+                    ->getStateUsing(function (PhotoBatch $record): HtmlString {
+                        $photo = $record->photos()->first();
+                        if (!$photo) {
+                            return new HtmlString('<span style="color: #999;">—</span>');
+                        }
+                        $url = asset('storage/' . $photo->image);
+                        return new HtmlString('<img src="' . $url . '" style="width: 48px; height: 48px; object-fit: cover; border-radius: 6px;" />');
+                    }),
 
                 Tables\Columns\TextColumn::make('title')
-                    ->label('Название товара')
+                    ->label('Товар')
                     ->searchable()
-                    ->limit(50)
-                    ->tooltip(fn(PhotoBatch $record): string => $record->title ?? ''),
+                    ->limit(40)
+                    ->tooltip(fn(PhotoBatch $record): string => $record->title ?? '')
+                    ->description(fn(PhotoBatch $record): ?string => $record->correlation_id),
 
                 Tables\Columns\TextColumn::make('gg_labels')
-                    ->label('Наша лейба')
+                    ->label('Лейба')
                     ->getStateUsing(function (PhotoBatch $record): string {
                         $labels = $record->getGgLabels();
                         $ggOnly = array_filter($labels, fn($l) => str_starts_with($l, 'GG'));
@@ -327,45 +518,28 @@ class PhotoBatchResource extends Resource
                     ->badge()
                     ->color('warning'),
 
-                Tables\Columns\TextColumn::make('status')
-                    ->label('Статус')
-                    ->badge()
-                    ->color(fn(string $state): string => match ($state) {
-                        'pending' => 'gray',
-                        'processed' => 'success',
-                        'failed' => 'danger',
-                        'default' => 'gray'
-                    })
-                    ->formatStateUsing(fn(string $state): string => match ($state) {
-                        'pending' => 'Ожидает',
-                        'processed' => 'Обработано',
-                        'failed' => 'Ошибка',
-                        default => $state,
-                    }),
-
                 Tables\Columns\TextColumn::make('uploaded_at')
-                    ->label('Загружено')
-                    ->dateTime('d.m.Y H:i')
+                    ->label('Дата')
+                    ->dateTime('d.m H:i')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('photos_preview')
-                    ->label('Превью')
-                    ->getStateUsing(function (PhotoBatch $record): HtmlString {
-                        $photos = $record->photos()->limit(4)->get();
-                        if ($photos->isEmpty()) {
-                            return new HtmlString('<span style="color: #999;">—</span>');
-                        }
-                        $html = '<div style="display: flex; gap: 4px;">';
-                        foreach ($photos as $photo) {
-                            $url = asset('storage/' . $photo->image);
-                            $html .= '<img src="' . $url . '" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" />';
-                        }
-                        $html .= '</div>';
-                        return new HtmlString($html);
-                    }),
+                Tables\Columns\TextColumn::make('pochtoy_status')
+                    ->label('📦')
+                    ->badge()
+                    ->color(fn(?string $state): string => match ($state) {
+                        'success' => 'success',
+                        'failed' => 'danger',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn(?string $state): string => match ($state) {
+                        'success' => '✓',
+                        'failed' => '✗',
+                        default => '⏳',
+                    })
+                    ->tooltip(fn(PhotoBatch $record): ?string => $record->pochtoy_error),
 
                 Tables\Columns\TextColumn::make('photos_count')
-                    ->label('Фото')
+                    ->label('📷')
                     ->counts('photos')
                     ->sortable(),
             ])
@@ -376,6 +550,7 @@ class PhotoBatchResource extends Resource
                     ->options([
                         'pending' => 'Ожидает',
                         'processed' => 'Обработано',
+                        'published' => 'Опубликовано',
                         'failed' => 'Ошибка',
                     ]),
             ])
@@ -397,7 +572,7 @@ class PhotoBatchResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            // No relations needed - tabs are in the main form
         ];
     }
 
@@ -559,6 +734,163 @@ class PhotoBatchResource extends Resource
             $livewire->dispatch('$refresh');
         } else {
             \Filament\Notifications\Notification::make()->title('Ошибка Gemini')->danger()->send();
+        }
+    }
+
+    public static function generateEbayListing($set, $livewire): void
+    {
+        $record = $livewire->getRecord();
+        if (!$record) return;
+
+        $photos = $record->photos;
+        if ($photos->isEmpty()) {
+            \Filament\Notifications\Notification::make()->title('No photos')->warning()->send();
+            return;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Generating eBay listing with Gemini...')
+            ->info()
+            ->send();
+
+        set_time_limit(180);
+
+        $service = new \App\Services\GeminiService();
+        $photoPaths = $photos->pluck('image')->toArray();
+
+        // Pass context from existing product data
+        $productData = [
+            'title' => $record->title,
+            'brand' => $record->brand,
+            'category' => $record->category,
+            'condition' => $record->condition,
+        ];
+
+        $result = $service->generateEbayListing($photoPaths, $productData);
+
+        if ($result) {
+            // Map the results to form fields
+            $set('ebay_title', $result['title'] ?? '');
+            $set('ebay_description', $result['description'] ?? '');
+            $set('ebay_brand', $result['brand'] ?? '');
+            $set('ebay_category', $result['category'] ?? '11450');
+            $set('ebay_condition', $result['condition'] ?? 'Pre-owned - Good');
+            $set('ebay_size', $result['size'] ?? '');
+            $set('ebay_color', $result['color'] ?? '');
+            $set('ebay_price', $result['price_usd'] ?? 0);
+            $set('ebay_tags', $result['tags'] ?? []);
+
+            // Save to database
+            $record->update([
+                'ebay_title' => $result['title'] ?? null,
+                'ebay_description' => $result['description'] ?? null,
+                'ebay_brand' => $result['brand'] ?? null,
+                'ebay_category' => $result['category'] ?? '11450',
+                'ebay_condition' => $result['condition'] ?? 'Pre-owned - Good',
+                'ebay_size' => $result['size'] ?? null,
+                'ebay_color' => $result['color'] ?? null,
+                'ebay_price' => $result['price_usd'] ?? 0,
+                'ebay_tags' => $result['tags'] ?? [],
+            ]);
+
+            \Filament\Notifications\Notification::make()
+                ->title('eBay listing generated successfully!')
+                ->success()
+                ->send();
+
+            $livewire->dispatch('$refresh');
+        } else {
+            \Filament\Notifications\Notification::make()
+                ->title('Failed to generate eBay listing')
+                ->danger()
+                ->send();
+        }
+    }
+
+    public static function publishToMarketplaces($livewire): void
+    {
+        $record = $livewire->getRecord();
+        if (!$record) return;
+
+        // Validate required fields
+        if (empty($record->ebay_title) || empty($record->ebay_description)) {
+            \Filament\Notifications\Notification::make()
+                ->title('Please generate listing first')
+                ->body('You need to generate the eBay listing before publishing')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Publishing to marketplaces...')
+            ->info()
+            ->send();
+
+        $results = [
+            'ebay' => false,
+            'shopify' => false,
+        ];
+
+        // TODO: eBay API Integration
+        // Requires eBay Trading API or Sell API with OAuth
+        // Example endpoints:
+        // - POST https://api.ebay.com/sell/inventory/v1/inventory_item
+        // - POST https://api.ebay.com/sell/inventory/v1/offer
+        //
+        // For now, logging the data that would be sent
+        \Illuminate\Support\Facades\Log::info('eBay listing data:', [
+            'title' => $record->ebay_title,
+            'description' => $record->ebay_description,
+            'price' => $record->ebay_price,
+            'condition' => $record->ebay_condition,
+            'category' => $record->ebay_category,
+            'photos' => $record->photos()->where('is_public', true)->pluck('image')->toArray(),
+        ]);
+
+        // TODO: Shopify API Integration
+        // Requires Shopify Admin API with access token
+        // Example endpoint:
+        // - POST https://{shop}.myshopify.com/admin/api/2024-01/products.json
+        //
+        // For now, logging the data that would be sent
+        \Illuminate\Support\Facades\Log::info('Shopify product data:', [
+            'title' => $record->ebay_title,
+            'body_html' => $record->ebay_description,
+            'vendor' => $record->ebay_brand,
+            'product_type' => $record->ebay_category,
+            'tags' => implode(', ', $record->ebay_tags ?? []),
+            'variants' => [
+                [
+                    'price' => $record->ebay_price,
+                    'sku' => $record->sku ?? uniqid('SKU-'),
+                ],
+            ],
+        ]);
+
+        // Simulate success for now
+        $results['ebay'] = true; // Set to true when API is implemented
+        $results['shopify'] = true; // Set to true when API is implemented
+
+        $successCount = array_sum($results);
+
+        if ($successCount > 0) {
+            $message = 'Published to: ' . implode(', ', array_keys(array_filter($results)));
+
+            \Filament\Notifications\Notification::make()
+                ->title('Publishing simulated')
+                ->body($message . ' (API integration pending - check logs for data)')
+                ->success()
+                ->send();
+
+            // Update record status or add marketplace IDs when APIs are ready
+            // $record->update(['marketplace_status' => 'published']);
+        } else {
+            \Filament\Notifications\Notification::make()
+                ->title('Publishing failed')
+                ->body('Could not publish to any marketplace')
+                ->danger()
+                ->send();
         }
     }
 }

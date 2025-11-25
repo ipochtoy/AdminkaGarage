@@ -40,7 +40,79 @@ class ProcessPhotoBatchJob implements ShouldQueue
         // Update status
         $this->batch->update(['status' => 'processed', 'processed_at' => now()]);
 
+        // 3. Send to Pochtoy
+        $this->sendToPochtoy();
+
+        // 4. Auto-create Product
+        $this->createProduct($photos);
+
         Log::info("Batch {$this->batch->id} processed successfully");
+    }
+
+    protected function sendToPochtoy(): void
+    {
+        $this->batch->refresh();
+        
+        // Check if we have GG labels - required for Pochtoy
+        $ggLabels = $this->batch->getGgLabels();
+        
+        if (empty($ggLabels)) {
+            $this->batch->update([
+                'pochtoy_status' => 'failed',
+                'pochtoy_error' => 'Не найдена лейба GG',
+            ]);
+            Log::warning("Batch {$this->batch->id}: No GG label found, skipping Pochtoy");
+            return;
+        }
+
+        $service = new \App\Services\PochtoyService();
+        $result = $service->sendCard($this->batch);
+
+        if ($result['success']) {
+            $this->batch->update([
+                'pochtoy_status' => 'success',
+                'pochtoy_error' => null,
+            ]);
+            Log::info("Batch {$this->batch->id}: Sent to Pochtoy successfully");
+        } else {
+            $error = $result['error'] ?? 'Unknown error';
+            $this->batch->update([
+                'pochtoy_status' => 'failed',
+                'pochtoy_error' => $error,
+            ]);
+            Log::error("Batch {$this->batch->id}: Pochtoy failed - {$error}");
+        }
+    }
+
+    protected function createProduct($photos): void
+    {
+        // Refresh batch to get updated data
+        $this->batch->refresh();
+
+        // Create product with AI-generated data
+        $product = \App\Models\Product::create([
+            'photo_batch_id' => $this->batch->id,
+            'title' => $this->batch->title,
+            'description' => $this->batch->description,
+            'price' => $this->batch->price,
+            'brand' => $this->batch->brand,
+            'category' => $this->batch->category,
+            'size' => $this->batch->size,
+            'color' => $this->batch->color,
+            'material' => $this->batch->material ?? null,
+            'condition' => $this->batch->condition ?? 'used',
+            'status' => 'draft', // Draft until manual review
+        ]);
+
+        // Copy photos to product
+        foreach ($photos as $index => $photo) {
+            $product->photos()->create([
+                'image_path' => $photo->image,
+                'order' => $index,
+            ]);
+        }
+
+        Log::info("Product {$product->id} created from batch {$this->batch->id}");
     }
 
     protected function scanBarcodes($photos): void

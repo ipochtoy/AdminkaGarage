@@ -5,7 +5,8 @@
         $ggLabels = $record ? array_unique($record->getGgLabels()) : [];
     @endphp
 
-    @foreach($ggLabels as $label)
+    {{-- GG Labels with edit button --}}
+    @forelse($ggLabels as $label)
         @php
             $isGgLabel = str_starts_with($label, 'GG') || str_starts_with($label, 'Q');
         @endphp
@@ -22,8 +23,31 @@
                 {{ $label }}
             </span>
         @endif
-    @endforeach
+    @empty
+        {{-- No GG label - show add button --}}
+        <button 
+            type="button"
+            wire:click="mountAction('edit_gg_label')"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-500/10 text-orange-400 border border-dashed border-orange-500/40 hover:bg-orange-500/20 hover:border-orange-500/60 transition-colors cursor-pointer"
+        >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Добавить лейбу
+        </button>
+    @endforelse
 
+    {{-- Edit button (always visible if has labels) --}}
+    @if(count($ggLabels) > 0)
+        <button 
+            type="button"
+            wire:click="mountAction('edit_gg_label')"
+            class="inline-flex items-center justify-center w-7 h-7 rounded-md text-orange-400/70 hover:text-orange-300 hover:bg-orange-500/20 transition-colors cursor-pointer"
+            title="Редактировать лейбу"
+        >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+        </button>
+    @endif
+
+    {{-- Other barcodes --}}
     @foreach($barcodes as $barcode)
         @if(!in_array($barcode->data, $ggLabels))
             <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 ring-1 ring-emerald-500/10">
@@ -32,8 +56,4 @@
             </span>
         @endif
     @endforeach
-
-    @if(count($ggLabels) === 0 && $barcodes->isEmpty())
-        <span class="text-sm text-gray-500 italic px-2">Баркоды не найдены</span>
-    @endif
 </div>

@@ -14,7 +14,7 @@ class PochtoyService
 
     public function __construct()
     {
-        $this->apiUrl = config('services.pochtoy.api_url', 'https://pochtoy-test.pochtoy3.ru/api/garage-tg/store');
+        $this->apiUrl = 'https://pochtoy-test.pochtoy3.ru/api/garage-tg/store';
         $this->apiToken = config('services.pochtoy.api_token', '');
     }
 
