@@ -27,6 +27,12 @@ class PhotoBatch extends Model
         'sku',
         'quantity',
         'ai_summary',
+        'declaration_en',
+        'declaration_ru',
+        'declaration_hs_code',
+        'declaration_sku',
+        'declaration_url',
+        'declaration_has_battery',
         'locations',
         // eBay & Shopify fields
         'ebay_title',
@@ -48,6 +54,7 @@ class PhotoBatch extends Model
         'ebay_price' => 'decimal:2',
         'uploaded_at' => 'datetime',
         'processed_at' => 'datetime',
+        'declaration_has_battery' => 'boolean',
     ];
 
     public function photos(): HasMany

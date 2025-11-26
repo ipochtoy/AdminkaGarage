@@ -184,6 +184,32 @@
                 </div>
             </section>
 
+            <!-- 4. Declaration (Technical - not sent to Pochtoy) -->
+            <section class="bg-gradient-to-r from-amber-900/20 to-amber-900/10 rounded-xl border border-amber-800/50 overflow-hidden">
+                <div class="px-4 py-3 border-b border-amber-800/30 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-amber-400 flex items-center gap-2">
+                        <i class="fa-solid fa-file-invoice"></i> Декларация
+                        <span class="text-[10px] bg-amber-900/50 text-amber-300 px-1.5 py-0.5 rounded font-normal">техническое</span>
+                    </h3>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-amber-400/80 mb-1.5 uppercase tracking-wider">Description EN (3-5 слов)</label>
+                            <input type="text" id="declaration_en" value="{{ $card->declaration_en }}" class="w-full bg-gray-900 border border-amber-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-colors placeholder-gray-600" placeholder="women sneakers New Balance">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-amber-400/80 mb-1.5 uppercase tracking-wider">Описание RU (3-5 слов)</label>
+                            <input type="text" id="declaration_ru" value="{{ $card->declaration_ru }}" class="w-full bg-gray-900 border border-amber-700/50 rounded-lg px-4 py-2.5 text-sm text-gray-100 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-colors placeholder-gray-600" placeholder="женские кроссовки Нью Баланс">
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-gray-500 leading-relaxed">
+                        <i class="fa-solid fa-info-circle mr-1"></i>
+                        Короткие описания для таможенной декларации Pochtoy. Генерируются автоматически вместе с описанием товара.
+                    </p>
+                </div>
+            </section>
+
              <!-- eBay Results (Hidden) -->
              <div id="ebay-results-wrapper" class="hidden">
                 <section class="bg-[#1e293b] rounded-xl border border-gray-700 p-4">
@@ -348,6 +374,8 @@
                 color: document.getElementById('color').value,
                 sku: document.getElementById('sku').value,
                 quantity: document.getElementById('quantity').value,
+                declaration_en: document.getElementById('declaration_en').value,
+                declaration_ru: document.getElementById('declaration_ru').value,
             };
             const res = await apiCall(`/api/card/${cardId}/save`, 'POST', data);
             showToast(res.ok ? 'Сохранено' : 'Ошибка сохранения', res.ok ? 'success' : 'error');
@@ -365,6 +393,15 @@
                 box.innerHTML = res.data.summary.replace(/\n/g, '<br>');
                 box.classList.remove('hidden');
                 document.getElementById('description').value = res.data.summary;
+
+                // Fill declaration fields if returned
+                if (res.data.declaration_en) {
+                    document.getElementById('declaration_en').value = res.data.declaration_en;
+                }
+                if (res.data.declaration_ru) {
+                    document.getElementById('declaration_ru').value = res.data.declaration_ru;
+                }
+
                 showToast('Описание создано');
             } else {
                 showToast('Ошибка AI', 'error');

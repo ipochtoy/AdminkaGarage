@@ -181,6 +181,10 @@ class ProcessPhotoBatchJob implements ShouldQueue
                     'size' => $result['size'] ?? null,
                     'condition' => $result['condition'] ?? 'used',
                     'price' => $result['price_estimate'] ?? null,
+                    'declaration_en' => $result['declaration_en'] ?? null,
+                    'declaration_ru' => $result['declaration_ru'] ?? null,
+                    'declaration_sku' => $result['declaration_sku'] ?? null,
+                    'declaration_has_battery' => $result['declaration_has_battery'] ?? false,
                     'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
                 ]);
 
@@ -202,6 +206,10 @@ class ProcessPhotoBatchJob implements ShouldQueue
                     'size' => $result['size'] ?? null,
                     'condition' => $result['condition'] ?? 'used',
                     'price' => $result['price_estimate'] ?? null,
+                    'declaration_en' => $result['declaration_en'] ?? null,
+                    'declaration_ru' => $result['declaration_ru'] ?? null,
+                    'declaration_sku' => $result['declaration_sku'] ?? null,
+                    'declaration_has_battery' => $result['declaration_has_battery'] ?? false,
                     'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
                 ]);
 

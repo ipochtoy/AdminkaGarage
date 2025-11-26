@@ -309,6 +309,57 @@ class PhotoBatchResource extends Resource
                             ]),
                     ]),
 
+                // 5.5. Declaration Section (Technical)
+                Forms\Components\Section::make('Декларация')
+                    ->description('Данные для таможенной декларации Pochtoy Express')
+                    ->schema([
+                        // Row 1: EN description + RU description
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('declaration_en')
+                                    ->label('Description EN (3-5 слов)')
+                                    ->placeholder('women sneakers New Balance')
+                                    ->maxLength(255),
+                                Forms\Components\TextInput::make('declaration_ru')
+                                    ->label('Описание RU (3-5 слов)')
+                                    ->placeholder('женские кроссовки Нью Баланс')
+                                    ->maxLength(255),
+                            ]),
+                        // Row 2: SKU, Brand (brand берём из основного поля)
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('declaration_sku')
+                                    ->label('Артикул (ASIN/SKU)')
+                                    ->placeholder('B0CZ9TDDN6')
+                                    ->maxLength(100),
+                                Forms\Components\Placeholder::make('brand_display')
+                                    ->label('Бренд')
+                                    ->content(fn ($record) => $record?->brand ?? '—'),
+                            ]),
+                        // Row 3: Quantity, Price, URL
+                        Forms\Components\Grid::make(3)
+                            ->schema([
+                                Forms\Components\Placeholder::make('quantity_display')
+                                    ->label('Количество')
+                                    ->content(fn ($record) => $record?->quantity ?? 1),
+                                Forms\Components\Placeholder::make('price_display')
+                                    ->label('Стоимость (USD)')
+                                    ->content(fn ($record) => $record?->price ? '$' . number_format($record->price, 2) : '—'),
+                                Forms\Components\TextInput::make('declaration_url')
+                                    ->label('Ссылка на товар')
+                                    ->placeholder('https://www.amazon.com/dp/B0CZ9TDDN6')
+                                    ->url()
+                                    ->maxLength(500),
+                            ]),
+                        // Row 4: Battery checkbox
+                        Forms\Components\Toggle::make('declaration_has_battery')
+                            ->label('Батарея')
+                            ->helperText('Содержит ли товар литиевую батарею')
+                            ->inline(false),
+                    ])
+                    ->collapsible()
+                    ->columnSpanFull(),
+
                 // 6. Preview Button
                 Forms\Components\Section::make('')
                     ->schema([
@@ -621,6 +672,9 @@ class PhotoBatchResource extends Resource
             $result = $aiService->generateSummaryFromPaths($photoPaths, $barcodes, $ggLabels);
 
             if ($result) {
+                // Apply fallback for declaration fields
+                $result = static::generateDeclarationFallback($result);
+
                 $set('title', $result['title'] ?? '');
                 $set('description', $result['description'] ?? '');
                 $set('brand', $result['brand'] ?? '');
@@ -629,6 +683,10 @@ class PhotoBatchResource extends Resource
                 $set('size', $result['size'] ?? '');
                 $set('condition', $result['condition'] ?? 'used');
                 $set('price', $result['price_estimate'] ?? null);
+                $set('declaration_en', $result['declaration_en'] ?? '');
+                $set('declaration_ru', $result['declaration_ru'] ?? '');
+                $set('declaration_sku', $result['declaration_sku'] ?? '');
+                $set('declaration_has_battery', $result['declaration_has_battery'] ?? false);
                 $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
                 // Save detected codes
@@ -668,6 +726,10 @@ class PhotoBatchResource extends Resource
                     'size' => $result['size'] ?? null,
                     'condition' => $result['condition'] ?? 'used',
                     'price' => $result['price_estimate'] ?? null,
+                    'declaration_en' => $result['declaration_en'] ?? null,
+                    'declaration_ru' => $result['declaration_ru'] ?? null,
+                    'declaration_sku' => $result['declaration_sku'] ?? null,
+                    'declaration_has_battery' => $result['declaration_has_battery'] ?? false,
                     'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
                 ]);
 
@@ -680,6 +742,15 @@ class PhotoBatchResource extends Resource
         }
 
         if ($result) {
+            // Apply fallback for declaration fields
+            $result = static::generateDeclarationFallback($result);
+
+            \Illuminate\Support\Facades\Log::info('Filament AI Generation - Declaration fields', [
+                'declaration_en' => $result['declaration_en'] ?? 'NOT SET',
+                'declaration_ru' => $result['declaration_ru'] ?? 'NOT SET',
+                'declaration_sku' => $result['declaration_sku'] ?? 'NOT SET',
+            ]);
+
             $set('title', $result['title'] ?? '');
             $set('description', $result['description'] ?? '');
             $set('brand', $result['brand'] ?? '');
@@ -688,6 +759,10 @@ class PhotoBatchResource extends Resource
             $set('size', $result['size'] ?? '');
             $set('condition', $result['condition'] ?? 'used');
             $set('price', $result['price_estimate'] ?? null);
+            $set('declaration_en', $result['declaration_en'] ?? '');
+            $set('declaration_ru', $result['declaration_ru'] ?? '');
+            $set('declaration_sku', $result['declaration_sku'] ?? '');
+            $set('declaration_has_battery', $result['declaration_has_battery'] ?? false);
             $set('ai_summary', json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
             // Save detected codes
@@ -727,6 +802,10 @@ class PhotoBatchResource extends Resource
                 'size' => $result['size'] ?? null,
                 'condition' => $result['condition'] ?? 'used',
                 'price' => $result['price_estimate'] ?? null,
+                'declaration_en' => $result['declaration_en'] ?? null,
+                'declaration_ru' => $result['declaration_ru'] ?? null,
+                'declaration_sku' => $result['declaration_sku'] ?? null,
+                'declaration_has_battery' => $result['declaration_has_battery'] ?? false,
                 'ai_summary' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
             ]);
 
@@ -805,6 +884,136 @@ class PhotoBatchResource extends Resource
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Generate fallback declaration fields from product data
+     */
+    protected static function generateDeclarationFallback(array $result): array
+    {
+        $title = $result['title'] ?? '';
+        $category = $result['category'] ?? '';
+        $brand = $result['brand'] ?? '';
+
+        // If declaration fields are empty, generate from main fields
+        if (empty($result['declaration_en']) || empty($result['declaration_ru'])) {
+            // Detect item type from category/title for proper declaration
+            $categoryLower = mb_strtolower($category);
+            $titleLower = mb_strtolower($title);
+
+            // Mapping for special categories (Pochtoy rules)
+            $specialCategories = [
+                // Bags, backpacks, wallets
+                ['keywords' => ['сумка', 'рюкзак', 'кошелек', 'кошелёк', 'клатч', 'портмоне', 'bag', 'backpack', 'wallet', 'purse', 'clutch'],
+                 'en' => 'Hand luggage accessories', 'ru' => 'Аксессуар для ручной клади'],
+                // Vinyl records
+                ['keywords' => ['винил', 'пластинк', 'vinyl', 'record', 'музык'],
+                 'en' => 'Collectible music media', 'ru' => 'Музыкальные носители'],
+                // Pet food
+                ['keywords' => ['корм для', 'pet food', 'dog food', 'cat food', 'собак', 'кошек', 'животных корм'],
+                 'en' => 'Food products', 'ru' => 'Продукты питания'],
+                // Pet vitamins
+                ['keywords' => ['витамины для животных', 'pet vitamins', 'добавки для собак', 'добавки для кошек'],
+                 'en' => 'Vitamins supplements', 'ru' => 'Витамины добавки'],
+                // Cosmetics
+                ['keywords' => ['косметик', 'помада', 'тушь', 'тени', 'cosmetic', 'makeup', 'lipstick', 'mascara'],
+                 'en' => 'Personal hygiene product', 'ru' => 'Средство личной гигиены'],
+                // Toys
+                ['keywords' => ['игрушк', 'toy', 'кукла', 'doll', 'lego', 'плюш'],
+                 'en' => 'Board game', 'ru' => 'Настольная игра'],
+            ];
+
+            $foundSpecial = false;
+            foreach ($specialCategories as $spec) {
+                foreach ($spec['keywords'] as $keyword) {
+                    if (str_contains($categoryLower, $keyword) || str_contains($titleLower, $keyword)) {
+                        if (empty($result['declaration_en'])) {
+                            $result['declaration_en'] = $spec['en'];
+                        }
+                        if (empty($result['declaration_ru'])) {
+                            $result['declaration_ru'] = $spec['ru'];
+                        }
+                        $foundSpecial = true;
+                        break 2;
+                    }
+                }
+            }
+
+            // If not special category, generate from title/category/brand
+            if (!$foundSpecial) {
+                // Count items in lot
+                $itemCount = 1;
+                if (preg_match('/(\d+)\s*(шт|pcs|items)/i', $title, $matches)) {
+                    $itemCount = (int)$matches[1];
+                } elseif (str_contains($titleLower, 'лот') || str_contains($titleLower, 'lot')) {
+                    // Try to count items in lot title
+                    $itemCount = substr_count($titleLower, ',') + substr_count($titleLower, ' и ') + substr_count($titleLower, ' and ') + 1;
+                }
+
+                // Detect gender
+                $gender = '';
+                $genderEn = '';
+                if (str_contains($titleLower, 'женск') || str_contains($titleLower, 'woman') || str_contains($titleLower, 'women')) {
+                    $gender = 'женской';
+                    $genderEn = 'women';
+                } elseif (str_contains($titleLower, 'мужск') || str_contains($titleLower, 'man') || str_contains($titleLower, 'men')) {
+                    $gender = 'мужской';
+                    $genderEn = 'men';
+                } elseif (str_contains($titleLower, 'детск') || str_contains($titleLower, 'kid') || str_contains($titleLower, 'child')) {
+                    $gender = 'детской';
+                    $genderEn = 'kids';
+                }
+
+                // Detect clothing type
+                $clothingTypes = [
+                    ['keywords' => ['футболк', 't-shirt', 'tshirt', 'майк', 'топ'], 'ru' => 'футболка', 'en' => 't-shirt'],
+                    ['keywords' => ['толстовк', 'худи', 'свитер', 'hoodie', 'sweater', 'sweatshirt'], 'ru' => 'толстовка', 'en' => 'sweatshirt'],
+                    ['keywords' => ['куртк', 'jacket', 'пальто', 'coat'], 'ru' => 'куртка', 'en' => 'jacket'],
+                    ['keywords' => ['джинс', 'jeans', 'брюк', 'pants', 'шорт', 'shorts'], 'ru' => 'штаны', 'en' => 'pants'],
+                    ['keywords' => ['плать', 'dress', 'юбк', 'skirt'], 'ru' => 'платье', 'en' => 'dress'],
+                    ['keywords' => ['кроссовк', 'sneaker', 'обув', 'shoe', 'ботинк', 'boot'], 'ru' => 'обувь', 'en' => 'footwear'],
+                    ['keywords' => ['носк', 'sock', 'колготк', 'tights'], 'ru' => 'носки', 'en' => 'socks'],
+                    ['keywords' => ['трус', 'underwear', 'бельё', 'белье', 'panties', 'briefs'], 'ru' => 'белье', 'en' => 'underwear'],
+                    ['keywords' => ['шапк', 'hat', 'кепк', 'cap', 'бейсболк'], 'ru' => 'головной убор', 'en' => 'headwear'],
+                ];
+
+                $itemType = 'одежда';
+                $itemTypeEn = 'clothing';
+
+                foreach ($clothingTypes as $type) {
+                    foreach ($type['keywords'] as $keyword) {
+                        if (str_contains($titleLower, $keyword) || str_contains($categoryLower, $keyword)) {
+                            $itemType = $type['ru'];
+                            $itemTypeEn = $type['en'];
+                            break 2;
+                        }
+                    }
+                }
+
+                // Generate declaration strings
+                if (empty($result['declaration_ru'])) {
+                    if ($itemCount > 1 || str_contains($titleLower, 'лот')) {
+                        $result['declaration_ru'] = "лот {$gender} {$itemType} {$itemCount} шт.";
+                    } else {
+                        $result['declaration_ru'] = trim("{$gender} {$itemType}");
+                    }
+                    // Clean up double spaces
+                    $result['declaration_ru'] = preg_replace('/\s+/', ' ', trim($result['declaration_ru']));
+                }
+
+                if (empty($result['declaration_en'])) {
+                    if ($itemCount > 1 || str_contains($titleLower, 'лот') || str_contains($titleLower, 'lot')) {
+                        $result['declaration_en'] = "{$genderEn} {$itemTypeEn} lot {$itemCount}";
+                    } else {
+                        $result['declaration_en'] = trim("{$genderEn} {$itemTypeEn}");
+                    }
+                    // Clean up double spaces
+                    $result['declaration_en'] = preg_replace('/\s+/', ' ', trim($result['declaration_en']));
+                }
+            }
+        }
+
+        return $result;
     }
 
     public static function publishToMarketplaces($livewire): void

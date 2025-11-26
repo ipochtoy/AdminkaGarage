@@ -39,6 +39,8 @@ class ProductCardController extends Controller
             'sku' => 'nullable|string|max:200',
             'quantity' => 'nullable|integer|min:1',
             'ai_summary' => 'nullable|string',
+            'declaration_en' => 'nullable|string|max:255',
+            'declaration_ru' => 'nullable|string|max:255',
         ]);
 
         $photoBatch->update($validated);
@@ -64,11 +66,56 @@ class ProductCardController extends Controller
         $summary = $aiService->generateSummary($photoUrls, $barcodes, $ggLabels);
 
         if ($summary) {
-            $photoBatch->update(['ai_summary' => $summary]);
-            return response()->json(['success' => true, 'summary' => $summary]);
+            $updateData = ['ai_summary' => $summary];
+            $declarationEn = null;
+            $declarationRu = null;
+
+            // Try to parse JSON to extract declaration fields
+            $parsed = $this->parseJsonFromSummary($summary);
+            if ($parsed) {
+                if (isset($parsed['declaration_en'])) {
+                    $declarationEn = $parsed['declaration_en'];
+                    $updateData['declaration_en'] = $declarationEn;
+                }
+                if (isset($parsed['declaration_ru'])) {
+                    $declarationRu = $parsed['declaration_ru'];
+                    $updateData['declaration_ru'] = $declarationRu;
+                }
+            }
+
+            $photoBatch->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'summary' => $summary,
+                'declaration_en' => $declarationEn,
+                'declaration_ru' => $declarationRu,
+            ]);
         }
 
         return response()->json(['success' => false, 'error' => 'Failed to generate summary'], 500);
+    }
+
+    protected function parseJsonFromSummary(string $summary): ?array
+    {
+        $text = $summary;
+
+        // Remove markdown code blocks
+        if (str_starts_with($text, '```')) {
+            $parts = explode('```', $text);
+            if (count($parts) > 1) {
+                $text = $parts[1];
+                if (str_starts_with($text, 'json')) {
+                    $text = substr($text, 4);
+                }
+            }
+        }
+
+        try {
+            return json_decode(trim($text), true);
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     public function scanBarcodes(PhotoBatch $photoBatch)
