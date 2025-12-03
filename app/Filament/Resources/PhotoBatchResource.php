@@ -593,6 +593,24 @@ class PhotoBatchResource extends Resource
                     ->label('📷')
                     ->counts('photos')
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('telegram_status')
+                    ->label('📱')
+                    ->getStateUsing(function (PhotoBatch $record): string {
+                        $posts = \App\Models\TelegramPost::where('photo_batch_id', $record->id)->get();
+                        if ($posts->isEmpty()) return '—';
+                        $sent = $posts->where('status', 'sent')->count();
+                        $sold = $posts->where('is_sold', true)->count();
+                        if ($sold > 0) return "🔴 {$sold}";
+                        if ($sent > 0) return "✓ {$sent}";
+                        return "⏳ {$posts->count()}";
+                    })
+                    ->badge()
+                    ->color(fn (string $state): string => match (true) {
+                        str_contains($state, '🔴') => 'danger',
+                        str_contains($state, '✓') => 'success',
+                        default => 'gray',
+                    }),
             ])
             ->defaultSort('uploaded_at', 'desc')
             ->filters([
@@ -612,6 +630,30 @@ class PhotoBatchResource extends Resource
                     ->icon('heroicon-o-eye')
                     ->url(fn(PhotoBatch $record): string => route('product-card', $record->id))
                     ->openUrlInNewTab(),
+                Tables\Actions\Action::make('mark_sold')
+                    ->label('Продано')
+                    ->icon('heroicon-o-check-badge')
+                    ->color('danger')
+                    ->visible(function (PhotoBatch $record): bool {
+                        return \App\Models\TelegramPost::where('photo_batch_id', $record->id)
+                            ->where('status', 'sent')
+                            ->where('is_sold', false)
+                            ->exists();
+                    })
+                    ->requiresConfirmation()
+                    ->modalHeading('Отметить как продано?')
+                    ->modalDescription('Все посты в Telegram будут обновлены с пометкой "ПРОДАНО"')
+                    ->action(function (PhotoBatch $record) {
+                        $service = app(\App\Services\TelegramPostService::class);
+                        $results = $service->markProductAsSold($record);
+
+                        $updated = count(array_filter($results, fn($p) => $p->is_sold));
+
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title("Отмечено как продано: {$updated} постов")
+                            ->send();
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -1098,6 +1140,52 @@ class PhotoBatchResource extends Resource
             \Filament\Notifications\Notification::make()
                 ->title('Publishing failed')
                 ->body('Could not publish to any marketplace')
+                ->danger()
+                ->send();
+        }
+
+        // Публикация в Telegram каналы
+        try {
+            $telegramService = app(\App\Services\TelegramPostService::class);
+            $telegramResults = $telegramService->publishProduct($record);
+
+            $telegramSuccess = 0;
+            $telegramFailed = 0;
+
+            foreach ($telegramResults as $channelName => $post) {
+                if ($post->status === 'sent') {
+                    $telegramSuccess++;
+                    \Filament\Notifications\Notification::make()
+                        ->title("Telegram: {$channelName}")
+                        ->body('Пост опубликован')
+                        ->success()
+                        ->send();
+                } else {
+                    $telegramFailed++;
+                    \Filament\Notifications\Notification::make()
+                        ->title("Telegram: {$channelName}")
+                        ->body('Ошибка: ' . ($post->error_message ?? 'Unknown'))
+                        ->danger()
+                        ->send();
+                }
+            }
+
+            if ($telegramSuccess > 0) {
+                \Illuminate\Support\Facades\Log::info('Telegram posts published', [
+                    'photo_batch_id' => $record->id,
+                    'success' => $telegramSuccess,
+                    'failed' => $telegramFailed,
+                ]);
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Telegram publishing failed', [
+                'photo_batch_id' => $record->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            \Filament\Notifications\Notification::make()
+                ->title('Telegram: Ошибка')
+                ->body($e->getMessage())
                 ->danger()
                 ->send();
         }
