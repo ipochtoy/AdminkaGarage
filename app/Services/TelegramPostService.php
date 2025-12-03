@@ -202,27 +202,58 @@ class TelegramPostService
     }
 
     /**
-     * Построить подпись к фото
+     * Построить подпись к фото (структурированный формат)
      */
     protected function buildCaption(TelegramPost $post): string
     {
-        $parts = [];
+        $lines = [];
 
-        $parts[] = "🛒 <b>{$post->title}</b>";
+        // Заголовок
+        $lines[] = "🛒 <b>{$post->title}</b>";
+        $lines[] = "━━━━━━━━━━━━━━━━";
 
+        // Характеристики из связанного PhotoBatch
+        $batch = $post->photoBatch;
+        if ($batch) {
+            if ($batch->brand) {
+                $lines[] = "🏷 {$batch->brand}";
+            }
+            if ($batch->size) {
+                $lines[] = "📏 Размер: {$batch->size}";
+            }
+            if ($batch->color) {
+                $lines[] = "🎨 {$batch->color}";
+            }
+            if ($batch->condition) {
+                $conditionText = match($batch->condition) {
+                    'new' => 'Новое',
+                    'used' => 'Б/у',
+                    'refurbished' => 'Восстановленное',
+                    default => $batch->condition,
+                };
+                $lines[] = "📦 {$conditionText}";
+            }
+        }
+
+        // Короткое описание (если есть)
         if ($post->description) {
-            $parts[] = "\n" . $post->description;
+            $lines[] = "";
+            $lines[] = $post->description;
         }
 
+        // Цена
         if ($post->price) {
-            $parts[] = "\n💰 <b>{$post->formatted_price}</b>";
+            $lines[] = "";
+            $lines[] = "💰 <b>{$post->formatted_price}</b>";
         }
 
+        // Продано
         if ($post->is_sold) {
-            $parts[] = "\n\n❌ <b>ПРОДАНО</b>";
+            $lines[] = "";
+            $lines[] = "❌ <b>ПРОДАНО</b>";
         }
 
-        return implode('', $parts);
+        return implode("\n", $lines);
     }
 
     /**
@@ -248,7 +279,7 @@ class TelegramPostService
     }
 
     /**
-     * Форматировать описание из batch
+     * Форматировать короткое описание из batch (1-2 предложения)
      */
     protected function formatDescription(PhotoBatch $batch): string
     {
@@ -257,12 +288,17 @@ class TelegramPostService
         // Убираем HTML теги
         $desc = strip_tags($desc);
 
-        // Ограничиваем длину для Telegram (макс 1024 символа для caption)
-        if (mb_strlen($desc) > 300) {
-            $desc = mb_substr($desc, 0, 297) . '...';
+        // Берём только первое предложение или 100 символов
+        if (preg_match('/^(.+?[.!?])\s/', $desc, $matches)) {
+            $desc = $matches[1];
         }
 
-        return $desc;
+        // Ограничиваем длину
+        if (mb_strlen($desc) > 150) {
+            $desc = mb_substr($desc, 0, 147) . '...';
+        }
+
+        return trim($desc);
     }
 
     /**
