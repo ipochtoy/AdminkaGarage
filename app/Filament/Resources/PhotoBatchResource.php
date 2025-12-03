@@ -384,6 +384,61 @@ class PhotoBatchResource extends Resource
                     ])
                     ->columnSpanFull(),
 
+                // 7. Telegram & Publish Section
+                Forms\Components\Section::make('Публикация')
+                    ->schema([
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\CheckboxList::make('telegram_channels')
+                                    ->label('Telegram каналы')
+                                    ->options(fn () => \App\Models\TelegramChannel::active()->ordered()->pluck('name', 'id'))
+                                    ->default(fn () => \App\Models\TelegramChannel::active()->pluck('id')->toArray())
+                                    ->columns(2)
+                                    ->bulkToggleable()
+                                    ->dehydrated(false),
+
+                                Forms\Components\Placeholder::make('telegram_status_info')
+                                    ->label('Статус постов')
+                                    ->content(function ($record) {
+                                        if (!$record) return 'Сначала сохраните товар';
+
+                                        $posts = \App\Models\TelegramPost::where('photo_batch_id', $record->id)->get();
+                                        if ($posts->isEmpty()) {
+                                            return new HtmlString('<span class="text-gray-500">Не опубликовано в Telegram</span>');
+                                        }
+
+                                        $html = '<div class="space-y-1">';
+                                        foreach ($posts as $post) {
+                                            $status = match($post->status) {
+                                                'sent' => $post->is_sold
+                                                    ? '<span class="text-red-600">🔴 Продано</span>'
+                                                    : '<span class="text-green-600">✓ Опубликовано</span>',
+                                                'failed' => '<span class="text-red-600">✗ Ошибка</span>',
+                                                default => '<span class="text-gray-500">⏳ Черновик</span>',
+                                            };
+                                            $html .= "<div>{$post->channel->name}: {$status}</div>";
+                                        }
+                                        $html .= '</div>';
+                                        return new HtmlString($html);
+                                    }),
+                            ]),
+
+                        Forms\Components\Actions::make([
+                            Forms\Components\Actions\Action::make('send_to_garage')
+                                ->label('Отправить в Гараж')
+                                ->icon('heroicon-o-paper-airplane')
+                                ->color('success')
+                                ->size('lg')
+                                ->requiresConfirmation()
+                                ->modalHeading('Отправить в Гараж?')
+                                ->modalDescription('Товар будет отправлен в Pochtoy и опубликован в выбранные Telegram каналы')
+                                ->action(function ($livewire, $get) {
+                                    static::sendToGarageWithTelegram($livewire, $get('telegram_channels') ?? []);
+                                }),
+                        ])->fullWidth(),
+                    ])
+                    ->columnSpanFull(),
+
                                 // 5. Tech Info (Collapsed)
                                 Forms\Components\Section::make('Техническая информация')
                                     ->schema([
@@ -1143,40 +1198,127 @@ class PhotoBatchResource extends Resource
                 ->danger()
                 ->send();
         }
+    }
 
-        // Публикация в Telegram каналы
+    /**
+     * Отправить товар в Гараж (Pochtoy) + опубликовать в выбранные Telegram каналы
+     */
+    public static function sendToGarageWithTelegram($livewire, array $selectedChannelIds = []): void
+    {
+        $record = $livewire->getRecord();
+        if (!$record) return;
+
+        // 1. Сначала сохраняем текущие данные формы
+        $livewire->save();
+        $record->refresh();
+
+        // 2. Отправляем в Pochtoy
+        \Filament\Notifications\Notification::make()
+            ->title('Отправка в Гараж...')
+            ->info()
+            ->send();
+
+        try {
+            $pochtoyService = app(\App\Services\PochtoyService::class);
+            $pochtoyResult = $pochtoyService->sendCard($record);
+
+            if ($pochtoyResult['success']) {
+                $record->update([
+                    'pochtoy_status' => 'success',
+                    'pochtoy_error' => null,
+                    'status' => 'processed',
+                    'processed_at' => now(),
+                ]);
+
+                \Filament\Notifications\Notification::make()
+                    ->title('Отправлено в Гараж')
+                    ->success()
+                    ->send();
+            } else {
+                $record->update([
+                    'pochtoy_status' => 'failed',
+                    'pochtoy_error' => $pochtoyResult['error'] ?? 'Unknown error',
+                ]);
+
+                \Filament\Notifications\Notification::make()
+                    ->title('Ошибка Pochtoy')
+                    ->body($pochtoyResult['error'] ?? 'Unknown error')
+                    ->danger()
+                    ->send();
+
+                return; // Не публикуем в Telegram если Pochtoy не сработал
+            }
+        } catch (\Exception $e) {
+            $record->update([
+                'pochtoy_status' => 'failed',
+                'pochtoy_error' => $e->getMessage(),
+            ]);
+
+            \Filament\Notifications\Notification::make()
+                ->title('Ошибка Pochtoy')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        // 3. Публикуем в выбранные Telegram каналы
+        if (empty($selectedChannelIds)) {
+            $livewire->dispatch('$refresh');
+            return;
+        }
+
         try {
             $telegramService = app(\App\Services\TelegramPostService::class);
-            $telegramResults = $telegramService->publishProduct($record);
-
             $telegramSuccess = 0;
             $telegramFailed = 0;
 
-            foreach ($telegramResults as $channelName => $post) {
+            foreach ($selectedChannelIds as $channelId) {
+                $channel = \App\Models\TelegramChannel::find($channelId);
+                if (!$channel || !$channel->is_active) continue;
+
+                // Проверяем, нет ли уже поста для этого канала
+                $existingPost = \App\Models\TelegramPost::where('photo_batch_id', $record->id)
+                    ->where('telegram_channel_id', $channelId)
+                    ->first();
+
+                if ($existingPost) {
+                    // Если пост уже есть и отправлен — пропускаем
+                    if ($existingPost->status === 'sent') {
+                        continue;
+                    }
+                    // Если черновик или ошибка — пробуем переотправить
+                    $post = $telegramService->sendPost($existingPost);
+                } else {
+                    // Создаём и отправляем новый пост
+                    $post = $telegramService->createPostFromBatch($record, $channel);
+                    $post = $telegramService->sendPost($post);
+                }
+
                 if ($post->status === 'sent') {
                     $telegramSuccess++;
                     \Filament\Notifications\Notification::make()
-                        ->title("Telegram: {$channelName}")
+                        ->title("Telegram: {$channel->name}")
                         ->body('Пост опубликован')
                         ->success()
                         ->send();
                 } else {
                     $telegramFailed++;
                     \Filament\Notifications\Notification::make()
-                        ->title("Telegram: {$channelName}")
+                        ->title("Telegram: {$channel->name}")
                         ->body('Ошибка: ' . ($post->error_message ?? 'Unknown'))
                         ->danger()
                         ->send();
                 }
             }
 
-            if ($telegramSuccess > 0) {
-                \Illuminate\Support\Facades\Log::info('Telegram posts published', [
-                    'photo_batch_id' => $record->id,
-                    'success' => $telegramSuccess,
-                    'failed' => $telegramFailed,
-                ]);
-            }
+            \Illuminate\Support\Facades\Log::info('Garage + Telegram published', [
+                'photo_batch_id' => $record->id,
+                'telegram_success' => $telegramSuccess,
+                'telegram_failed' => $telegramFailed,
+            ]);
+
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Telegram publishing failed', [
                 'photo_batch_id' => $record->id,
@@ -1189,5 +1331,7 @@ class PhotoBatchResource extends Resource
                 ->danger()
                 ->send();
         }
+
+        $livewire->dispatch('$refresh');
     }
 }
